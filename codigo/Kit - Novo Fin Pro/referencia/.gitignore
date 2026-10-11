@@ -1,0 +1,25 @@
+# Controle de versão do Fin Pro: só o CÓDIGO entra aqui.
+# Os dados (boletos, comprovantes, configurações com senhas e tokens) ficam de fora e são protegidos pelo BACKUP.
+
+# Ambiente Python e arquivos gerados
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.tmp
+
+# Senhas e chaves
+.env
+
+# Dados reais e da demonstração (nunca versionar)
+dados/
+dados_demo/
+dados_*/
+
+# Planilha aberta no Excel e cópias avulsas
+~$*.xlsx
+Arquivos de hoje*/
+
+# Preferências locais das ferramentas
+.claude/settings.local.json

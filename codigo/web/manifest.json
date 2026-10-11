@@ -1,0 +1,51 @@
+{
+  "name": "Fin Pro",
+  "short_name": "Fin Pro",
+  "description": "Boletos, Pix, caixa, gastos e fechamentos das empresas, com lembretes de vencimento.",
+  "start_url": "/#/painel",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1b1f",
+  "theme_color": "#0b1b1f",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/icons/icone-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icone-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Ler boletos",
+      "url": "/#/ler",
+      "icons": [
+        {
+          "src": "/icons/icone-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Boletos lançados",
+      "url": "/#/boletos",
+      "icons": [
+        {
+          "src": "/icons/icone-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

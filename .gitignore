@@ -1,0 +1,22 @@
+# Backup e dados reais — ficam na VPS (/opt/finpro/dados), não no Git
+arquivos/
+planilha/
+configuracoes/
+pacotes/
+versoes/
+dados/
+dados_demo/
+dados_*/
+
+# Ambiente e segredos
+.venv/
+venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# Pasta de dados do app
+codigo/dados/
+codigo/.venv/

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1b1f">
+  <title>Fin Pro</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d7a64'/%3E%3Cpath d='M8 9v14M11 9v14M14 9v14M18 9v14M21 9v14M24 9v14' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icone-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>
+    (function () {
+      var tema = null;
+      try { tema = localStorage.getItem("tema"); } catch (e) {}
+      if (!tema) tema = window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = tema;
+    })();
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar">
+      <a class="marca" href="#/painel">
+        <span class="marca-logo" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 6v12M7 6v12M10 6v12M14 6v12M17 6v12M20 6v12"/></svg>
+        </span>
+        <span class="marca-texto"><strong>Fin</strong> Pro</span>
+      </a>
+
+      <nav class="nav" aria-label="Navegação principal">
+        <a href="#/painel" data-rota="painel"><span data-icone="painel"></span>Painel</a>
+        <a href="#/ler" data-rota="ler"><span data-icone="scan"></span>Ler boletos<span class="nav-contador" data-contador-ler hidden></span><span class="nav-contador info" data-contador-entrada title="Boletos recebidos por e-mail e Telegram aguardando conferência" hidden></span></a>
+        <a href="#/boletos" data-rota="boletos"><span data-icone="lista"></span>Boletos lançados</a>
+        <a href="#/pix" data-rota="pix"><span data-icone="pix"></span>Pagamentos Pix</a>
+        <a href="#/comprovantes" data-rota="comprovantes"><span data-icone="clipe"></span>Comprovantes</a>
+        <a href="#/caixa" data-rota="caixa"><span data-icone="caixa"></span>Caixa<span class="nav-contador info" data-contador-caixa title="Comprovantes do bot do caixa esperando revisão" hidden></span></a>
+        <a href="#/diesel" data-rota="diesel"><span data-icone="diesel"></span>Diesel<span class="nav-contador info" data-contador-diesel title="Canhotos do bot do diesel esperando a máquina ou a conferência" hidden></span></a>
+        <a href="#/gastos" data-rota="gastos"><span data-icone="grafico"></span>Gastos</a>
+        <a href="#/empresas" data-rota="empresas"><span data-icone="carteira"></span>Empresas<span class="nav-contador info" data-contador-empresas title="Notas, cheques e comprovantes aguardando conferência" hidden></span></a>
+        <a href="#/notificacoes" data-rota="notificacoes"><span data-icone="sino"></span>Notificações<span class="nav-contador alerta" data-contador-notif hidden></span></a>
+        <a href="#/config" data-rota="config"><span data-icone="config"></span>Configurações</a>
+      </nav>
+
+      <div class="sidebar-rodape">
+        <div class="status-sistema" id="status-sistema">
+          <div class="status-linha"><span class="ponto"></span>Conectando…</div>
+        </div>
+        <button class="btn-tema" id="btn-tema" type="button"></button>
+      </div>
+    </aside>
+    <div class="sidebar-fundo" id="sidebar-fundo"></div>
+
+    <div class="principal">
+      <header class="topo">
+        <button class="btn-icone btn-menu" id="btn-menu" type="button" aria-label="Abrir menu"><span data-icone="menu"></span></button>
+        <div class="topo-titulos">
+          <h1 id="titulo-pagina">Painel</h1>
+          <p id="subtitulo-pagina"></p>
+        </div>
+        <div class="menu-ancora">
+          <button class="btn-icone btn-sino" id="btn-sino" type="button" aria-label="Avisos de vencimento" aria-haspopup="true">
+            <span data-icone="sino"></span><span class="sino-badge" id="sino-badge" hidden></span>
+          </button>
+          <div class="menu painel-sino" id="painel-sino" hidden></div>
+        </div>
+        <a class="btn btn-primario topo-cta" href="#/ler"><span data-icone="upload"></span><span class="rotulo-longo">Ler boletos</span></a>
+      </header>
+      <div class="aviso-gravacao" id="aviso-gravacao" role="status" hidden></div>
+      <main id="view" class="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <div class="soltar-overlay" aria-hidden="true">
+    <div class="soltar-caixa">
+      <span data-icone="upload"></span>
+      <strong>Solte para ler os boletos</strong>
+      <span>PDF, JPG, PNG, WEBP ou HEIC</span>
+    </div>
+  </div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="modais"></div>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

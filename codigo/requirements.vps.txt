@@ -1,0 +1,19 @@
+# Dependências da VPS (sem desktop Windows, sem testes).
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+python-dotenv>=1.0
+openpyxl>=3.1
+xlrd>=2.0.1
+segno>=1.6
+pypdfium2>=4.30
+zxing-cpp>=2.2
+pillow>=10.4
+pillow-heif>=0.18
+numpy>=1.26
+opencv-python-headless>=4.10
+rapidocr>=3.4
+rapidocr_onnxruntime>=1.3
+reportlab>=4
+anthropic>=1.0
+httpx>=0.27

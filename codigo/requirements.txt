@@ -1,0 +1,37 @@
+# Servidor e API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+python-dotenv>=1.0
+
+# Planilha (banco de dados)
+openpyxl>=3.1
+xlrd>=2.0.1
+
+# QR code do acesso pelo celular
+segno>=1.6
+
+# Leitura de PDF, imagens, código de barras e OCR
+pypdfium2>=4.30
+zxing-cpp>=2.2
+pillow>=10.4
+pillow-heif>=0.18
+numpy>=1.26
+opencv-python>=4.10
+rapidocr>=3.4
+rapidocr_onnxruntime>=1.3
+
+# Aplicativo de desktop (janela própria + ícone na bandeja)
+pywebview>=5.3
+pystray>=0.19
+
+# Fechamento do mês em PDF
+reportlab>=4
+
+# IA opcional (Claude)
+anthropic>=1.0
+
+# Testes
+pytest>=8
+httpx>=0.27
+playwright>=1.40  # testes das telas (usa o Microsoft Edge já instalado)

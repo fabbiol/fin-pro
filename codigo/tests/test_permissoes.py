@@ -1,0 +1,197 @@
+"""Administrador por usuário, permissões por pessoa e login pedido toda vez que o aplicativo abre."""
+
+from datetime import date, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import acesso, admin, contexto, main, usuarios
+from app.arquivos import RepositorioArquivos
+from app.banco import BancoBoletos
+from app.empresas.configuracao import ConfigEmpresas
+from app.empresas.modelos import ABAS_EMPRESAS
+from app.fila_gravacao import FilaGravacao
+from app.planilha import PlanilhaBoletos
+from app.repositorio import RepositorioBoletos
+
+
+@pytest.fixture
+def sistema(tmp_path, monkeypatch):
+    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx", tmp_path / "backups")
+    fila = FilaGravacao(planilha, tmp_path / "fila.json")
+    gerenciador = usuarios.GerenciadorUsuarios(tmp_path / "usuarios.json")
+    empresas = BancoBoletos(tmp_path / "empresas.db", tmp_path / "fechamentos.xlsx", tmp_path / "backups",
+                            abas=ABAS_EMPRESAS, centros=False, nome_backup="empresas")
+    original = contexto.usuarios
+    monkeypatch.setattr(contexto, "planilha", planilha)
+    monkeypatch.setattr(contexto, "fila", fila)
+    monkeypatch.setattr(contexto, "repositorio", RepositorioBoletos(planilha, fila))
+    monkeypatch.setattr(contexto, "repositorio_pix", RepositorioBoletos(planilha, fila, "pix"))
+    monkeypatch.setattr(contexto, "arquivos", RepositorioArquivos(tmp_path / "arquivos"))
+    monkeypatch.setattr(contexto, "administrador", admin.GerenciadorAdmin(tmp_path / "admin.json"))
+    monkeypatch.setattr(contexto, "usuarios", gerenciador)
+    monkeypatch.setattr(contexto, "empresas", empresas)
+    monkeypatch.setattr(contexto, "empresas_config", ConfigEmpresas(tmp_path / "empresas.json"))
+    acesso.configurar_usuarios(gerenciador)
+    yield gerenciador
+    acesso.configurar_usuarios(original)
+    empresas.parar()
+
+
+def _entrar(cliente, login, senha):
+    resposta = cliente.post("/api/usuarios/entrar", json={"login": login, "senha": senha})
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()["usuario"]
+
+
+def _boleto(cliente):
+    return cliente.post("/api/boletos", json={"beneficiario": "Papelaria", "valor": 50,
+                                              "vencimento": (date.today() + timedelta(days=5)).isoformat(),
+                                              "ignorar_validacao": True})
+
+
+# --------------------------------------------------------------------------- administrador
+
+
+def test_administrador_entra_e_cadastra_sem_a_senha_de_administrador(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+
+    with TestClient(main.app, client=("192.168.0.50", 50000)) as celular:
+        assert celular.get("/api/usuarios").status_code == 401  # ainda não entrou
+        usuario = _entrar(celular, "fabio", "senha-do-dono")
+        assert usuario["perfil"] == "administrador" and "config" in usuario["permissoes"]
+
+        assert celular.get("/api/usuarios").status_code == 200
+        criado = celular.post("/api/usuarios", json={"nome": "Almir", "login": "almir", "senha": "almir-2026",
+                                                     "permissoes": ["lancar", "pagar"]})
+        assert criado.status_code == 201
+        assert criado.json()["criado"]["perfil"] == "comum"
+        assert criado.json()["criado"]["permissoes"] == ["lancar", "pagar"]
+        assert _boleto(celular).status_code == 201  # administrador pode tudo
+
+
+def test_nao_deixa_ficar_sem_administrador(sistema):
+    admin_id = sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")["id"]
+    with pytest.raises(usuarios.ErroUsuario):
+        sistema.alterar(admin_id, perfil="comum")
+    with pytest.raises(usuarios.ErroUsuario):
+        sistema.alterar(admin_id, ativo=False)
+    with pytest.raises(usuarios.ErroUsuario):
+        sistema.excluir(admin_id)
+
+    outro = sistema.criar("Ana", "ana", "ana-2026", "administrador")["id"]
+    sistema.alterar(admin_id, perfil="comum")  # agora tem outro administrador
+    assert sistema.listar()[0]["perfil"] in ("administrador", "comum")
+    assert sistema.tem_administrador and sistema.publico(sistema._obter(outro))["perfil"] == "administrador"
+
+
+# --------------------------------------------------------------------------- permissões
+
+
+def test_usuario_comum_so_faz_o_que_foi_liberado(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.criar("Almir", "almir", "almir-2026", "comum", ["lancar", "pagar"])
+
+    with TestClient(main.app, client=("192.168.0.50", 50000)) as celular:
+        _entrar(celular, "almir", "almir-2026")
+
+        # pode lançar e dar baixa
+        boleto = _boleto(celular)
+        assert boleto.status_code == 201
+        id_ = boleto.json()["id"]
+        assert celular.patch(f"/api/boletos/{id_}/status", json={"status": "Pago"}).status_code == 200
+
+        # não pode editar nem excluir
+        assert celular.put(f"/api/boletos/{id_}", json={"observacoes": "teste"}).status_code == 403
+        excluir = celular.delete(f"/api/boletos/{id_}")
+        assert excluir.status_code == 403 and excluir.json()["detail"]["codigo"] == "sem_permissao"
+
+        # telas restritas
+        assert celular.get("/api/gastos").status_code == 403
+        assert celular.get("/api/empresas").status_code == 403
+        assert celular.put("/api/notificacoes/config", json={"ativo": True}).status_code == 403
+        assert celular.put("/api/backup/config", json={"ativo": False}).status_code == 403
+
+        # o que é de todo mundo continua funcionando
+        assert celular.get("/api/boletos").status_code == 200
+        assert celular.get("/api/painel").status_code == 200
+        assert celular.post("/api/notificacoes/dispensar", json={"chave": "x"}).status_code == 200
+
+        # e não gerencia usuários
+        recusado = celular.post("/api/usuarios", json={"nome": "Outro", "senha": "123456"})
+        assert recusado.status_code == 403 and "administrador" in recusado.json()["detail"]["mensagem"]
+
+
+def test_permissoes_extras_liberam_as_telas(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.criar("Bia", "bia", "bia-2026", "comum", ["gastos", "empresas", "editar"])
+
+    with TestClient(main.app, client=("192.168.0.50", 50000)) as celular:
+        _entrar(celular, "bia", "bia-2026")
+        assert celular.get("/api/gastos").status_code == 200
+        assert celular.get("/api/empresas").status_code == 200
+        assert celular.post("/api/empresas", json={"nome": "Imapal"}).status_code == 201
+        assert _boleto(celular).status_code == 403  # não pode lançar
+
+
+def test_estado_do_acesso_mostra_perfil_e_permissoes(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.criar("Almir", "almir", "almir-2026", "comum", ["lancar"])
+
+    with TestClient(main.app, client=("192.168.0.50", 50000)) as celular:
+        _entrar(celular, "almir", "almir-2026")
+        estado = celular.get("/api/acesso/estado").json()
+        assert estado["usuario"]["perfil"] == "comum" and estado["usuario"]["permissoes"] == ["lancar"]
+        assert estado["administrador"] is False and estado["tem_administrador"] is True
+
+
+def test_usuarios_antigos_continuam_podendo_o_que_podiam(tmp_path):
+    """Arquivo criado antes das permissões: ninguém perde acesso de uma hora para outra."""
+    import json
+
+    caminho = tmp_path / "usuarios.json"
+    caminho.write_text(json.dumps({"usuarios": [{"id": "abc", "nome": "Almir", "login": "almir", "ativo": True,
+                                                 "senha_hash": "x", "sal": "00"}]}), encoding="utf-8")
+    gerenciador = usuarios.GerenciadorUsuarios(caminho)
+    almir = gerenciador.listar()[0]
+    assert almir["perfil"] == "comum"
+    assert almir["permissoes"] == list(usuarios.PERMISSOES)  # tudo, menos gerenciar usuários
+
+
+# --------------------------------------------------------------------------- login ao abrir o aplicativo
+
+
+def test_ao_abrir_o_aplicativo_so_o_computador_precisa_entrar_de_novo(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.definir_pedir_login_ao_abrir(True)
+
+    token_computador, _, _ = sistema.entrar("fabio", "senha-do-dono", "127.0.0.1", "janela", local=True)
+    token_celular, _, _ = sistema.entrar("fabio", "senha-do-dono", "192.168.0.50", "celular", local=False)
+
+    assert sistema.encerrar_sessoes_do_computador() == 1  # o aplicativo abriu de novo
+    assert sistema.usuario_da_sessao(token_computador) is None
+    assert sistema.usuario_da_sessao(token_celular)["login"] == "fabio"  # o celular continua conectado
+
+
+def test_login_pedido_toda_vez_que_o_aplicativo_abre(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.definir_pedir_login_ao_abrir(True)
+    assert sistema.exigir_login_no_computador and sistema.pedir_login_ao_abrir
+
+    with TestClient(main.app, client=("127.0.0.1", 50000)) as computador:  # aplicativo aberto
+        assert computador.get("/api/boletos").status_code == 401  # pede login mesmo no computador
+        _entrar(computador, "fabio", "senha-do-dono")
+        assert computador.get("/api/boletos").status_code == 200
+
+    with TestClient(main.app, client=("127.0.0.1", 50000)):  # fechou e abriu de novo
+        pass
+    with TestClient(main.app, client=("127.0.0.1", 50000)) as depois:
+        depois.cookies.update(computador.cookies)
+        assert depois.get("/api/boletos").status_code == 401  # a sessão de antes não vale mais
+
+
+def test_desligar_o_login_no_computador_desliga_o_pedido_ao_abrir(sistema):
+    sistema.criar("Fábio", "fabio", "senha-do-dono", "administrador")
+    sistema.definir_pedir_login_ao_abrir(True)
+    sistema.definir_exigir_login_no_computador(False)
+    assert not sistema.pedir_login_ao_abrir and not sistema.exigir_login_no_computador

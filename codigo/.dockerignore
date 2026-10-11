@@ -1,0 +1,20 @@
+.venv
+venv
+dados
+dados_demo
+dados_*
+.env
+.git
+.gitignore
+__pycache__
+*.pyc
+.pytest_cache
+*.tmp
+tests
+Kit - Novo Fin Pro
+iniciar.bat
+iniciar.command
+iniciar.sh
+webview
+*.md
+.claude
