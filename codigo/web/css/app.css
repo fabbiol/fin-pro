@@ -1769,3 +1769,8 @@ button.diesel-precos:hover { border-color: var(--marca); }
 .versao-item summary::-webkit-details-marker { display: none; }
 .versao-item summary strong { flex: 1; min-width: 200px; }
 .versao-item .lista-info { margin: 8px 0 2px; }
+
+/* ------------------------------------------------------------------ Configurações: ajustes */
+.btn-icone:disabled { opacity: .35; cursor: not-allowed; }
+.btn-icone:disabled:hover { background: transparent; color: var(--texto-2); }
+.backup-pasta .input { flex: 1 1 auto; }
