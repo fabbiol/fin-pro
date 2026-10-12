@@ -6,7 +6,7 @@
 import { api } from "../../api.js";
 import { montarGraficoSeries } from "../../grafico.js";
 import { icone } from "../../icons.js";
-import { brl, dataBR, esc, mensagemErro, toast } from "../../ui.js";
+import { brl, dataBR, esc, mensagemErro, toast, urlArquivo } from "../../ui.js";
 import { litros, numero } from "./estado.js";
 import { htmlKpis } from "./painel.js";
 
@@ -258,7 +258,7 @@ function htmlCompras(d) {
     ${d.compras.length ? `<ul class="lista-mini">${d.compras.map((c) => `<li><div class="info">
         <div class="titulo">${c.valor ? brl(c.valor) : "sem valor"} · ${litros(c.litros)} de ${esc(c.combustivel || "Diesel S10")}${c.preco_litro ? ` · ${precoL(c.preco_litro)}/L` : ""}</div>
         <div class="sutil">${dataBR(c.data)}${c.posto ? ` · ${esc(c.posto)}` : ""}${c.forma ? ` · ${esc(c.forma)}` : ""}</div></div>
-        ${c.arquivo ? `<a class="btn-icone" href="/${esc(c.arquivo)}" target="_blank" rel="noopener" title="Ver comprovante">${icone("clipe", 15)}</a>` : ""}</li>`).join("")}</ul>`
+        ${c.arquivo ? `<a class="btn-icone" href="${urlArquivo(c.arquivo)}" target="_blank" rel="noopener" title="Ver comprovante">${icone("clipe", 15)}</a>` : ""}</li>`).join("")}</ul>`
       : `<p class="sutil">Nenhuma compra no período.</p>`}
   </article>`;
 }
@@ -310,7 +310,7 @@ function htmlAbastecimentos(d) {
               <small class="por-quem">${esc(numero(a.trecho.rodado))} ${esc(a.trecho.unidade_rodado)} desde ${dataBR(a.trecho.data_anterior)}</small>` : `<span class="sutil">—</span>`}</td>
             <td>${a.documento ? `nº ${esc(a.documento)}` : ""}${a.posto ? `<small class="por-quem">${esc(a.posto)}</small>` : ""}</td>
             <td>${esc(a.pessoa || "")}${a.lancado_por ? `<small class="por-quem">lançado por ${esc(a.lancado_por)}</small>` : ""}</td>
-            <td>${a.arquivo ? `<a class="btn-icone" href="/${esc(a.arquivo)}" target="_blank" rel="noopener" title="Ver canhoto">${icone("clipe", 15)}</a>` : ""}</td>
+            <td>${a.arquivo ? `<a class="btn-icone" href="${urlArquivo(a.arquivo)}" target="_blank" rel="noopener" title="Ver canhoto">${icone("clipe", 15)}</a>` : ""}</td>
           </tr>`).join("")}</tbody>`;
       }).join("")}
     </table></div>

@@ -1,7 +1,7 @@
 // Diesel · painel do período: saldo, comprado x abastecido, consumo por máquina e os lançamentos.
 import { api } from "../../api.js";
 import { icone } from "../../icons.js";
-import { abrirModal, brl, confirmar, dataBR, dataHoraBR, esc, mensagemErro, toast } from "../../ui.js";
+import { abrirModal, brl, confirmar, dataBR, dataHoraBR, esc, mensagemErro, toast, urlArquivo } from "../../ui.js";
 import { litros, numero, tela } from "./estado.js";
 import { formularioAbastecimento, formularioCompra } from "./formularios.js";
 
@@ -86,7 +86,7 @@ function tabela(linhas) {
         <td class="num">${r.valor ? brl(r.valor) : ""}${r.preco_litro ? `<small class="por-quem">${precoBR(r.preco_litro)}/L</small>` : ""}</td>
         <td>${esc(r.pessoa || "")}${r.lancado_por ? `<small class="por-quem">lançado por ${esc(r.lancado_por)}</small>` : ""}</td>
         <td class="col-acoes">
-          ${r.arquivo ? `<a class="btn-icone" href="/${esc(r.arquivo)}" target="_blank" rel="noopener" title="${compra ? "Ver comprovante" : "Ver canhoto"}">${icone("clipe", 15)}</a>` : ""}
+          ${r.arquivo ? `<a class="btn-icone" href="${urlArquivo(r.arquivo)}" target="_blank" rel="noopener" title="${compra ? "Ver comprovante" : "Ver canhoto"}">${icone("clipe", 15)}</a>` : ""}
           <button class="btn-icone" data-acao="historico-diesel" data-aba="${r.aba}" data-id="${r.id}" title="Histórico">${icone("relogio", 15)}</button>
           <button class="btn-icone" data-acao="editar-diesel" data-aba="${r.aba}" data-id="${r.id}" title="Editar">${icone("editar", 15)}</button>
           <button class="btn-icone perigo" data-acao="cancelar-diesel" data-aba="${r.aba}" data-id="${r.id}" title="Cancelar">${icone("lixeira", 15)}</button>

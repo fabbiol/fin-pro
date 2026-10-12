@@ -1,7 +1,7 @@
 // Empresas e fechamentos · notas fiscais lançadas (lista, lançamento manual e edição).
 import { api } from "../../api.js";
 import { icone } from "../../icons.js";
-import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor, toast, uid } from "../../ui.js";
+import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor, toast, uid, urlArquivo } from "../../ui.js";
 import { carregarDados, deuCerto, numero, opcoes, opcoesCompetencia, opcoesEmpresa, selo, tentar, vazio } from "./comum.js";
 import { STATUS_NOTA, UNIDADES, tela } from "./estado.js";
 
@@ -170,7 +170,7 @@ export async function editarNota(id) {
     <p class="sutil" style="margin-top:10px">O fechamento é escolhido pela data da nota, mas dá para mudar: uma nota que
       chegou depois do fechamento do mês pode entrar no seguinte.</p>
     ${nota.arquivo ? `<p class="sutil" style="margin-top:10px">${icone("clipe", 14)}
-      <a href="/${esc(nota.arquivo)}" target="_blank" rel="noopener">${esc(nota.arquivo_nome || "arquivo da nota")}</a></p>` : ""}`,
+      <a href="${urlArquivo(nota.arquivo)}" target="_blank" rel="noopener">${esc(nota.arquivo_nome || "arquivo da nota")}</a></p>` : ""}`,
     rodape: `<button class="btn btn-perigo btn-fantasma" data-excluir>${icone("lixeira", 15)} Excluir</button>
              <button class="btn btn-fantasma" data-fechar>Cancelar</button>
              <button class="btn btn-primario" data-salvar>${icone("check", 16)} Salvar</button>`,
