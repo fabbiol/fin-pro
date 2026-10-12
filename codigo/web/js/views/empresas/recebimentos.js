@@ -1,7 +1,7 @@
 // Empresas e fechamentos · recebimentos (Pix, TED, depósito e cheque) com a baixa das notas.
 import { api } from "../../api.js";
 import { icone } from "../../icons.js";
-import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor } from "../../ui.js";
+import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor, urlArquivo } from "../../ui.js";
 import { carregarDados, opcoes, opcoesEmpresa, selo, tentar, vazio } from "./comum.js";
 import { FORMAS } from "./estado.js";
 
@@ -38,7 +38,7 @@ function tabela(lista) {
       <td><small class="sutil">${esc(r.aplicacoes || "—")}</small></td><td>${selo(r.status)}</td>
       <td class="col-acoes">${r.status !== "Cancelado" ? `<button class="btn btn-sm btn-fantasma"
         data-acao="cancelar-recebimento" data-id="${r.id}">${icone("desfazer", 14)} Desfazer</button>` : ""}
-        ${r.arquivo ? `<a class="btn-icone btn-sm" href="/${esc(r.arquivo)}" target="_blank" rel="noopener"
+        ${r.arquivo ? `<a class="btn-icone btn-sm" href="${urlArquivo(r.arquivo)}" target="_blank" rel="noopener"
           title="Ver comprovante">${icone("clipe", 15)}</a>` : ""}</td></tr>`).join("")}</tbody></table>`;
 }
 

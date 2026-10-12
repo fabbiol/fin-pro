@@ -51,6 +51,9 @@ export function tamanhoArquivo(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
 }
 
+// Os registros guardam o arquivo como "arquivos/<id>.pdf", mas ele só é servido (com login) em /api/arquivos/<id>
+export const urlArquivo = (caminho) => `/api/arquivos/${encodeURIComponent(String(caminho ?? "").split("/").pop().split(".")[0])}`;
+
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export function debounce(fn, espera = 300) {

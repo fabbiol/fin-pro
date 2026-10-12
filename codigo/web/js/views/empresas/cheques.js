@@ -1,7 +1,7 @@
 // Empresas e fechamentos · cheques pré-datados (guardar, avisar o vencimento e dar baixa ao compensar).
 import { api } from "../../api.js";
 import { icone } from "../../icons.js";
-import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor } from "../../ui.js";
+import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor, urlArquivo } from "../../ui.js";
 import { carregarDados, deuCerto, opcoes, opcoesEmpresa, selo, tentar, vazio } from "./comum.js";
 import { STATUS_CHEQUE, tela } from "./estado.js";
 
@@ -86,7 +86,7 @@ export function formularioCheque(cheque = null, enviar = null) {
     </form>
     <p class="sutil" style="margin-top:10px">Os pedidos ou notas citados prendem as linhas do fechamento como
       “Em cheque”. Quando o cheque compensar, a baixa é feita sozinha.</p>
-    ${c.arquivo ? `<p class="sutil">${icone("clipe", 14)} <a href="/${esc(c.arquivo)}" target="_blank" rel="noopener">
+    ${c.arquivo ? `<p class="sutil">${icone("clipe", 14)} <a href="${urlArquivo(c.arquivo)}" target="_blank" rel="noopener">
       ${esc(c.arquivo_nome || "imagem do cheque")}</a></p>` : ""}`,
     rodape: `${edicao ? `<button class="btn btn-perigo btn-fantasma" data-excluir>${icone("lixeira", 15)} Excluir</button>` : ""}
       <button class="btn btn-fantasma" data-fechar>Cancelar</button>

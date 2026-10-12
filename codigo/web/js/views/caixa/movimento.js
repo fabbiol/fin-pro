@@ -2,7 +2,7 @@
 import { api } from "../../api.js";
 import { NOVO_CENTRO, carregarCentros, invalidarCentros, opcoesCentro, tratarNovoCentro } from "../../centros.js";
 import { icone } from "../../icons.js";
-import { abrirModal, brl, confirmar, dataBR, dataHoraBR, esc, hojeISO, mensagemErro, numeroBR, parseValor, toast } from "../../ui.js";
+import { abrirModal, brl, confirmar, dataBR, dataHoraBR, esc, hojeISO, mensagemErro, numeroBR, parseValor, toast, urlArquivo } from "../../ui.js";
 import { tela } from "./estado.js";
 
 export function htmlKpis(d) {
@@ -48,7 +48,7 @@ function tabela(lista) {
       <td>${r.centro_custo ? `<span class="tag-centro">${icone("etiqueta", 11)}${esc(r.centro_custo)}</span>` : ""}</td>
       <td>${esc(r.pessoa || "")}${r.lancado_por ? `<small class="por-quem">lançado por ${esc(r.lancado_por)}</small>` : ""}</td>
       <td class="col-acoes">
-        ${r.arquivo ? `<a class="btn-icone" href="/${esc(r.arquivo)}" target="_blank" rel="noopener" title="Ver comprovante">${icone("clipe", 15)}</a>` : ""}
+        ${r.arquivo ? `<a class="btn-icone" href="${urlArquivo(r.arquivo)}" target="_blank" rel="noopener" title="Ver comprovante">${icone("clipe", 15)}</a>` : ""}
         <button class="btn-icone" data-acao="historico-caixa" data-id="${r.id}" title="Histórico">${icone("relogio", 15)}</button>
         <button class="btn-icone" data-acao="editar-caixa" data-id="${r.id}" title="Editar">${icone("editar", 15)}</button>
         <button class="btn-icone perigo" data-acao="cancelar-caixa" data-id="${r.id}" title="Cancelar lançamento">${icone("lixeira", 15)}</button>
