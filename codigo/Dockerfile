@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LEITOR_PORT=8000 \
     LEITOR_ABRIR_NAVEGADOR=0 \
     LEITOR_DADOS_DIR=/app/dados \
-    TZ=America/Sao_Paulo
+    TZ=America/Cuiaba
 
 WORKDIR /app
 

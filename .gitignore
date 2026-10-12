@@ -1,9 +1,11 @@
 # Backup e dados reais — ficam na VPS (/opt/finpro/dados), não no Git
-arquivos/
-planilha/
-configuracoes/
-pacotes/
-versoes/
+# Com "/" no começo: só as pastas do backup na raiz. Sem ele, "configuracoes/" também escondia
+# codigo/web/js/views/configuracoes/ (a tela de Configurações) e o app publicado quebrava.
+/arquivos/
+/planilha/
+/configuracoes/
+/pacotes/
+/versoes/
 dados/
 dados_demo/
 dados_*/
