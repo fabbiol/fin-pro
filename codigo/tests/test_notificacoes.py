@@ -62,6 +62,17 @@ def ambiente(tmp_path, monkeypatch):
     return planilha, servico, enviados
 
 
+def test_fora_do_windows_desliga_a_notificacao_do_windows(ambiente, monkeypatch):
+    _, servico, _ = ambiente
+    assert servico.config_publica()["windows"]["ativo"]  # padrão: ligada
+    monkeypatch.setattr(canais, "WINDOWS", True)
+    assert not servico.desligar_windows_fora_do_windows() and servico.config_publica()["windows"]["ativo"]
+    monkeypatch.setattr(canais, "WINDOWS", False)
+    assert servico.desligar_windows_fora_do_windows()
+    assert not servico.config_publica()["windows"]["ativo"]
+    assert not servico.desligar_windows_fora_do_windows()  # já estava desligada
+
+
 def _somente_dia_do_vencimento(servico, horarios=("08:00", "12:00", "16:00")):
     servico.atualizar_config({"regras": [{"tipo": "vencimento", "horarios": list(horarios), "canais": ["windows"]}]})
 

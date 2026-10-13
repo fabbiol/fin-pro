@@ -1,5 +1,6 @@
 """Backup automático para fora do computador (OneDrive, Google Drive, pen drive)."""
 
+import json
 import os
 from datetime import date, datetime, timedelta
 
@@ -66,6 +67,54 @@ def test_avisa_quando_o_backup_atrasa_ou_falha(ambiente):
     gerenciador._estado.update(pasta=str(nuvem), ultimo={"ok": False, "quando": ontem.isoformat()},
                                ultimo_sucesso=ontem.isoformat(timespec="seconds"), horario="00:00")
     assert gerenciador.deve_executar(datetime.now())
+
+
+def test_usa_a_pasta_padrao_quando_a_configurada_nao_existe(ambiente, tmp_path):
+    """Sistema levado do Windows para a VPS: a pasta do OneDrive não existe lá e o backup passa para /backup."""
+    _, dados, _ = ambiente
+    falha = {"ok": False, "quando": datetime.now().isoformat(timespec="seconds"), "erro": "Pasta não encontrada"}
+    (dados / "backup.json").write_text(json.dumps({"ativo": True, "pasta": "C:\\Users\\Ana\\OneDrive",
+                                                   "ultimo_sucesso": "2026-10-10T12:30:00", "ultimo": falha}), encoding="utf-8")
+    gerenciador = backup.GerenciadorBackup(dados / "backup.json", dados, dados / "boletos.xlsx", dados / "arquivos")
+    assert gerenciador.status()["situacao"] == "atrasado" and not gerenciador.deve_executar()
+
+    vps = tmp_path / "backup"
+    vps.mkdir()
+    assert gerenciador.usar_pasta_padrao(str(vps))
+    status = gerenciador.status()
+    assert status["pasta"] == str(vps) and status["ativo"] and status["ultimo"] is None
+    assert gerenciador.deve_executar()  # tenta logo na pasta nova, sem esperar a falha da antiga
+    assert json.loads((dados / "backup.json").read_text(encoding="utf-8"))["pasta"] == str(vps)
+
+    outra = tmp_path / "outra"
+    outra.mkdir()
+    assert not gerenciador.usar_pasta_padrao(str(outra))  # a pasta configurada existe: nada muda
+    assert gerenciador.status()["pasta"] == str(vps)
+
+
+def test_conferencia_so_cobra_o_historico_de_versoes_quando_ele_existe(ambiente, tmp_path):
+    """Na VPS (Docker) o código não tem histórico do git: o backup não pode ficar vermelho por falta do finpro.bundle."""
+    _, dados, nuvem = ambiente
+    codigo = tmp_path / "sistema"
+    (codigo / "app").mkdir(parents=True)
+    (codigo / "app" / "main.py").write_text("print('oi')\n", encoding="utf-8")
+    for tem_historico, esperado in ((False, None), (True, False)):
+        gerenciador = backup.GerenciadorBackup(dados / f"backup-{tem_historico}.json", dados, dados / "boletos.xlsx",
+                                               dados / "arquivos", pasta_codigo=codigo, gerar_bundle=lambda destino: False,
+                                               tem_historico=lambda tem=tem_historico: tem)
+        gerenciador.configurar(pasta=str(nuvem), ativo=True)
+        assert gerenciador.executar()["ok"]
+        itens = {i["nome"]: i["ok"] for i in gerenciador.verificar()["itens"]}
+        assert itens.get("Histórico de versões") is esperado and itens["Código-fonte"]
+        assert gerenciador.status()["verificado"] is (esperado is None)
+
+
+def test_pasta_padrao_invalida_nao_muda_nada(ambiente, tmp_path):
+    gerenciador, dados, _ = ambiente
+    assert not gerenciador.usar_pasta_padrao("")
+    assert not gerenciador.usar_pasta_padrao(str(tmp_path / "nao-existe"))
+    assert not gerenciador.usar_pasta_padrao(str(dados / "arquivos"))  # dentro da pasta de dados
+    assert gerenciador.status()["pasta"] == "" and not gerenciador.status()["ativo"]
 
 
 def test_api_do_backup_exige_administrador(ambiente, monkeypatch, tmp_path):

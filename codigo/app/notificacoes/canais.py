@@ -16,6 +16,10 @@ from html import escape
 from .. import config
 
 
+# A notificação da área de trabalho só existe no Windows (na VPS o sistema roda em Linux)
+WINDOWS = os.name == "nt"
+
+
 class ErroCanal(RuntimeError):
     pass
 

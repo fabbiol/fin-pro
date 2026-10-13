@@ -119,8 +119,9 @@ def test_semana_vazia_nao_quebra(bancos):
 @pytest.fixture()
 def servico(tmp_path, monkeypatch, bancos):
     enviados = []
+    monkeypatch.setattr(canais, "WINDOWS", True)  # simula o computador com Windows (o canal não é desligado ao abrir)
     monkeypatch.setattr(canais, "enviar_windows", lambda titulo, corpo, url=None, url_pago=None: enviados.append(titulo))
-    montar = lambda tipo, hoje: resumo_semanal.mensagem(resumo_semanal.coletar(tipo, hoje), "http://x")  # noqa: E731
+    montar =lambda tipo, hoje: resumo_semanal.mensagem(resumo_semanal.coletar(tipo, hoje), "http://x")  # noqa: E731
     s = ServicoNotificacoes(contexto.repositorio, tmp_path / "notificacoes.json", "http://x", montar_resumo=montar)
     s.atualizar_config({"regras": [], "resumos": {"segunda": {"canais": ["windows"]}, "sexta": {"canais": ["windows"]}}})
     return s, enviados

@@ -80,7 +80,8 @@ backup = modulo_backup.GerenciadorBackup(config.DADOS_DIR / "backup.json", confi
                                        # backup total: também o código-fonte e o histórico de versões
                                        pasta_codigo=config.BASE_DIR, informar_versao=modulo_versao.carimbo,
                                        gerar_bundle=modulo_versao.gerar_bundle,
-                                       verificar_bundle=modulo_versao.verificar_bundle)
+                                       verificar_bundle=modulo_versao.verificar_bundle,
+                                       tem_historico=modulo_versao.tem_repositorio)
 
 rede = None  # GerenciadorRede: criado em app.main, pois serve a própria aplicação
 caixa_entrada = None  # CaixaEntrada: boletos recebidos por e-mail e Telegram (criada em app.main)

@@ -146,8 +146,10 @@ def _notificacoes() -> dict:
         return _item("notificacoes", "Lembretes de vencimento", "desligado", "Os lembretes estão desligados.", **detalhes)
     if config.NOTIFICACOES_AUTOMATICAS and not _vivo(servico):
         return _item("notificacoes", "Lembretes de vencimento", "erro", "O envio automático de lembretes parou. Reinicie o sistema.", **detalhes)
-    if ultimo and any(str(r).startswith("erro") for r in (ultimo.get("canais") or {}).values()):
-        falhas = ", ".join(f"{c}: {r.removeprefix('erro: ')}" for c, r in ultimo["canais"].items() if str(r).startswith("erro"))
+    # Falha de um canal que já foi desligado não é mais um problema
+    erros = {c: r for c, r in ((ultimo or {}).get("canais") or {}).items() if c in canais and str(r).startswith("erro")}
+    if erros:
+        falhas = ", ".join(f"{c}: {r.removeprefix('erro: ')}" for c, r in erros.items())
         return _item("notificacoes", "Lembretes de vencimento", "aviso", f"No último envio ({_data_hora(ultimo['quando'])}) houve falha — {falhas}", **detalhes)
     resumo = f"Ativos por {', '.join(NOMES_CANAIS.get(c, c) for c in canais)}."
     if ultimo:

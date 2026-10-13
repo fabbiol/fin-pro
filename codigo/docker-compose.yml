@@ -9,11 +9,12 @@ services:
       LEITOR_PORT: "8000"
       LEITOR_ABRIR_NAVEGADOR: "0"
       LEITOR_DADOS_DIR: "/app/dados"
+      LEITOR_BACKUP_PASTA: "/backup"
       TZ: "America/Cuiaba"
     volumes:
       - /opt/finpro/dados:/app/dados
-      # Pasta para o backup total (Configurações → Backup e recebimento → pasta "/backup"). Fica fora da pasta de
-      # dados, como o backup exige; na VPS é /opt/finpro/backup.
+      # Pasta do backup total, fora da pasta de dados como o backup exige (na VPS: /opt/finpro/backup). O sistema
+      # passa a usá-la sozinho quando a pasta configurada não existe (LEITOR_BACKUP_PASTA).
       - /opt/finpro/backup:/backup
     expose:
       - "8000"
