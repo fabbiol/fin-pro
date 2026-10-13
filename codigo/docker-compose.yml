@@ -12,6 +12,9 @@ services:
       TZ: "America/Cuiaba"
     volumes:
       - /opt/finpro/dados:/app/dados
+      # Pasta para o backup total (Configurações → Backup e recebimento → pasta "/backup"). Fica fora da pasta de
+      # dados, como o backup exige; na VPS é /opt/finpro/backup.
+      - /opt/finpro/backup:/backup
     expose:
       - "8000"
     healthcheck:
