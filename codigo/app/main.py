@@ -160,6 +160,12 @@ async def lifespan(_app: FastAPI):
             log.info("Caixa de entrada: arquivos com boletos já lançados foram concluídos")
     except Exception:
         log.exception("Falha ao revisar a caixa de entrada")
+    try:  # sistema levado do Windows para a VPS: pasta do backup e notificação da área de trabalho
+        if config.BACKUP_PASTA:
+            contexto.backup.usar_pasta_padrao(config.BACKUP_PASTA)
+        contexto.notificacoes.desligar_windows_fora_do_windows()
+    except Exception:
+        log.exception("Falha ao ajustar o backup e as notificações para este sistema")
     threading.Thread(target=_aquecer_ocr, daemon=True).start()
     contexto.fila.iniciar_agendador()
     if hasattr(contexto.planilha, "iniciar_sincronizacao"):

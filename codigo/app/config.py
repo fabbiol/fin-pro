@@ -38,6 +38,8 @@ DIAS_MANTER_ARQUIVOS_NAO_LANCADOS = int(os.getenv("LEITOR_DIAS_ARQUIVOS_TEMP", "
 URL_APP = os.getenv("LEITOR_URL") or f"http://{'localhost' if HOST in ('0.0.0.0', '127.0.0.1', '::') else HOST}:{PORT}"
 NOTIFICACOES_AUTOMATICAS = _bool("LEITOR_NOTIFICACOES_AUTOMATICAS", True)
 BACKUP_AUTOMATICO = _bool("LEITOR_BACKUP_AUTOMATICO", True)
+# Pasta do backup total quando a configurada não existe (na VPS: o volume /backup do docker-compose)
+BACKUP_PASTA = (os.getenv("LEITOR_BACKUP_PASTA") or "").strip()
 SENHA_ACESSO = (os.getenv("LEITOR_SENHA_ACESSO") or "").strip()
 
 IA_MODELO = os.getenv("LEITOR_IA_MODELO", "claude-opus-5")

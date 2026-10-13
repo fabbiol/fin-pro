@@ -257,6 +257,20 @@ class ServicoNotificacoes:
         with self._lock:
             return self._ler()[canal][campo]
 
+    def desligar_windows_fora_do_windows(self) -> bool:
+        """Fora do Windows (ex.: na VPS) a notificação da área de trabalho não existe: desliga o canal em vez de
+        registrar uma falha a cada envio. Devolve True se desligou."""
+        if canais.WINDOWS:
+            return False
+        with self._lock:
+            estado = self._ler()
+            if not estado["windows"].get("ativo"):
+                return False
+            estado["windows"]["ativo"] = False
+            self._gravar(estado)
+        log.info("Notificação do Windows desligada: este sistema não roda no Windows")
+        return True
+
     def atualizar_config(self, novo: dict) -> dict:
         with self._lock:
             estado = self._ler()

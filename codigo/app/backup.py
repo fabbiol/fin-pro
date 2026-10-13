@@ -178,13 +178,14 @@ def sugerir_pastas(base_usuario: Path | None = None) -> list[dict]:
 class GerenciadorBackup:
     def __init__(self, caminho_config: Path, pasta_dados: Path, planilha: Path, pasta_arquivos: Path, copiar_banco=None,
                  extras: list[dict] | None = None, pasta_codigo: Path | None = None, informar_versao=None,
-                 gerar_bundle=None, verificar_bundle=None):
+                 gerar_bundle=None, verificar_bundle=None, tem_historico=None):
         """``copiar_banco(destino)`` faz uma cópia consistente do banco de dados (SQLite).
 
         ``extras``: outros bancos/planilhas a copiar, como ``[{"nome": "empresas", "planilha": Path, "copiar_banco": fn}]``.
         ``pasta_codigo``: a pasta do sistema (código-fonte); sem ela, o backup leva só os dados.
         ``informar_versao()`` → texto do ``VERSAO.txt``; ``gerar_bundle(destino)`` grava o histórico de versões;
-        ``verificar_bundle(arquivo)`` confere esse arquivo.
+        ``verificar_bundle(arquivo)`` confere esse arquivo; ``tem_historico()`` diz se há histórico de versões para levar
+        (na VPS, em Docker, não há: a conferência não cobra o ``finpro.bundle``).
         """
         self.copiar_banco = copiar_banco
         self.extras = list(extras or [])
@@ -196,6 +197,7 @@ class GerenciadorBackup:
         self.informar_versao = informar_versao
         self.gerar_bundle = gerar_bundle
         self.verificar_bundle = verificar_bundle
+        self.tem_historico = tem_historico
         self._lock = threading.RLock()
         self._executando = threading.Lock()
         self._parar = threading.Event()
@@ -245,6 +247,28 @@ class GerenciadorBackup:
         except OSError as exc:
             raise ValueError("Sem permissão para gravar nesta pasta.") from exc
         return destino
+
+    def usar_pasta_padrao(self, pasta: str) -> bool:
+        """Quando a pasta configurada não existe (ex.: a do computador Windows, depois de levar o sistema para a VPS),
+        passa a usar ``pasta`` (LEITOR_BACKUP_PASTA). Não liga nem desliga o backup. Devolve True se trocou."""
+        if not pasta:
+            return False
+        with self._lock:
+            atual = self._estado.get("pasta") or ""
+            if atual and Path(atual).is_dir():
+                return False
+            try:
+                destino = self.validar_pasta(pasta)
+            except ValueError as exc:
+                log.warning("A pasta padrão do backup (%s) não pode ser usada: %s", pasta, exc)
+                return False
+            novo = {**self._estado, "pasta": str(destino)}
+            if (novo.get("ultimo") or {}).get("ok") is False:
+                novo["ultimo"] = None  # a falha era da pasta antiga: não esperar para tentar na nova
+            self._estado = novo
+            self._gravar()
+        log.info("Backup total: a pasta %r não existe; passando a usar %s", atual, destino)
+        return True
 
     def configurar(self, *, ativo: bool | None = None, pasta: str | None = None, horario: str | None = None,
                    manter_dias: int | None = None, codigo: bool | None = None, pacote: str | None = None,
@@ -692,7 +716,7 @@ class GerenciadorBackup:
             item("Código-fonte", bool(codigo) and not faltando,
                  f"{len(codigo)} arquivo(s) no backup" if codigo and not faltando
                  else f"{len(faltando)} de {len(codigo)} arquivo(s) faltando ou diferentes")
-            if self.gerar_bundle:
+            if self.gerar_bundle and (self.tem_historico is None or self.tem_historico()):
                 bundle = raiz / "versoes" / NOME_BUNDLE
                 if not bundle.is_file():
                     item("Histórico de versões", False, "o arquivo finpro.bundle não está no backup")
