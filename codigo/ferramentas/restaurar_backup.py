@@ -7,7 +7,7 @@
 
 O que ele faz:
   1. copia o código-fonte (pasta ``codigo``) para o destino;
-  2. coloca em ``destino/dados`` a cópia mais recente de cada banco (boletos, empresas, diesel), a pasta ``arquivos``
+  2. coloca em ``destino/dados`` a cópia mais recente de cada banco (boletos, empresas, diesel, transferencias), a pasta ``arquivos``
      (boletos, comprovantes, cupons, canhotos…) e as configurações; o ``.env`` volta para a pasta do sistema;
   3. se o git estiver instalado, recria o histórico de versões a partir de ``versoes/finpro.bundle``.
 
@@ -28,7 +28,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-RE_COPIA = re.compile(r"^(boletos|empresas|diesel)-(\d{4}-\d{2}-\d{2})\.db$")
+RE_COPIA = re.compile(r"^(boletos|empresas|diesel|transferencias)-(\d{4}-\d{2}-\d{2})\.db$")
 NOME_BUNDLE = "finpro.bundle"
 
 
@@ -56,7 +56,7 @@ def _copiar_arvore(origem: Path, destino: Path) -> int:
 
 
 def bancos_mais_recentes(backup: Path) -> dict[str, Path]:
-    """De cada banco (boletos, empresas, diesel), a cópia de data mais nova."""
+    """De cada banco (boletos, empresas, diesel, transferencias), a cópia de data mais nova."""
     melhores: dict[str, Path] = {}
     pasta = backup / "planilha"
     for caminho in pasta.iterdir() if pasta.is_dir() else []:
@@ -114,7 +114,7 @@ def restaurar(backup: Path, destino: Path, forcar: bool = False, sem_codigo: boo
 
     dados = destino / "dados"
     guardado = None
-    if any((dados / f"{nome}.db").exists() for nome in ("boletos", "empresas", "diesel")):
+    if any((dados / f"{nome}.db").exists() for nome in ("boletos", "empresas", "diesel", "transferencias")):
         if not forcar:
             raise ErroRestauracao(
                 f"A pasta {dados} já tem dados do Fin Pro. Para não apagar nada por engano, a restauração parou.\n"

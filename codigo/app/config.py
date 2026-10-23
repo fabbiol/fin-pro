@@ -25,6 +25,7 @@ DADOS_DIR = Path(os.getenv("LEITOR_DADOS_DIR") or BASE_DIR / "dados")
 PLANILHA_PATH = Path(os.getenv("LEITOR_PLANILHA") or DADOS_DIR / "boletos.xlsx")
 FECHAMENTOS_PATH = Path(os.getenv("LEITOR_FECHAMENTOS") or PLANILHA_PATH.parent / "fechamentos.xlsx")
 DIESEL_PATH = Path(os.getenv("LEITOR_DIESEL") or PLANILHA_PATH.parent / "diesel.xlsx")
+TRANSFERENCIAS_PATH = PLANILHA_PATH.parent / "transferencias.xlsx"
 ARQUIVOS_DIR = DADOS_DIR / "arquivos"
 BACKUPS_DIR = DADOS_DIR / "backups"
 WEB_DIR = BASE_DIR / "web"
@@ -44,6 +45,11 @@ SENHA_ACESSO = (os.getenv("LEITOR_SENHA_ACESSO") or "").strip()
 
 IA_MODELO = os.getenv("LEITOR_IA_MODELO", "claude-opus-5")
 IA_AUTOMATICA = _bool("LEITOR_IA_AUTOMATICA", False)
+
+
+def operacoes_token() -> str:
+    """Token que a Operações (sistema da pedreira) usa para mandar as notas. Vazio = integração desligada."""
+    return (os.getenv("OPERACOES_TOKEN") or "").strip()
 
 
 def ia_configurada() -> bool:

@@ -17,7 +17,7 @@ const DESCRICAO = "Digite a senha de administrador para cadastrar e gerenciar os
 /** Rótulos curtos das permissões (os mesmos da tabela do README); os longos vêm do servidor, para a janela de permissões. */
 const CURTOS = {
   lancar: "Lançar", pagar: "Dar baixa", editar: "Editar/excluir", gastos: "Gastos", empresas: "Empresas",
-  caixa: "Caixa", diesel: "Diesel", notificacoes: "Avisos", config: "Configurações",
+  caixa: "Caixa", diesel: "Diesel", transferencias: "Transferências", notificacoes: "Avisos", config: "Configurações",
 };
 
 /**

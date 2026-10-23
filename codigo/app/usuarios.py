@@ -45,6 +45,7 @@ PERMISSOES = {
     "empresas": "Empresas: notas fiscais, cheques e recebimentos",
     "caixa": "Caixa: entradas e saídas em dinheiro",
     "diesel": "Diesel: compras, abastecimentos das máquinas e relatórios",
+    "transferencias": "Transferências de clientes: notas pagas por Pix ou TED/DOC",
     "notificacoes": "Configurar os avisos de vencimento",
     "config": "Configurações do sistema (backup, bots, importação, rede)",
 }

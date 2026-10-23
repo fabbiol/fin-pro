@@ -110,6 +110,7 @@ deixa para alguém só conferir.
 | Gastos | Análise por centro de custo e fechamento do mês | Gastos |
 | Relatórios | Central de relatórios (pronta, aguardando liberação) | Todos (cada parte conforme permissão) |
 | Empresas | Vendas a prazo, notas, cheques, recebimentos | Empresas |
+| Transferências de clientes | Notas pagas por Pix ou TED/DOC que a Operações manda (seção 13.6) | Transferências |
 | Notificações | Lembretes e resumos | Avisos |
 | Configurações | Aplicativo, usuários, backup, integrações, saúde | Configurações / administrador |
 
@@ -138,6 +139,7 @@ pessoas cadastradas no bot dos boletos e no bot de notas.
 | `boletos.xlsx` | Planilha gerada automaticamente (abas Boletos, Pix, Caixa, Centros de Custo, Resumo, Histórico) |
 | `empresas.db` / `fechamentos.xlsx` | Empresas, notas fiscais, cheques e recebimentos |
 | `diesel.db` / `diesel.xlsx` | Máquinas, compras e abastecimentos de diesel |
+| `transferencias.db` / `transferencias.xlsx` | Notas pagas por Pix ou TED/DOC enviadas pela Operações |
 | `diesel_precos.json` | Preço do litro de cada combustível |
 | `arquivos\` | PDFs e fotos originais (boletos, comprovantes, cupons, canhotos, cheques, notas) |
 | `usuarios.json` | Usuários e senhas (somente em hash) |
@@ -658,6 +660,28 @@ Reconhece sozinho o que é cada arquivo:
 
 Dados em `dados\empresas.db`, com a planilha `fechamentos.xlsx` (abas Empresas, Notas Fiscais, Cheques, Recebimentos e Histórico).
 
+### 13.6 Transferências de clientes (notas que a Operações manda)
+
+Quando a nota de um cliente vai ser paga por **Pix** ou **TED/DOC**, a Operações (o sistema da pedreira) manda a nota
+sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, separada de Empresas:
+
+- Tabela com **Nota, Pedido, Empresa, Valor e Material**, a data de emissão, a forma (Pix ou TED/DOC), a situação
+  **Aguardando pagamento** e o botão **Abrir PDF** da nota.
+- Filtros por empresa e situação, e busca pelo número da nota.
+- Se a Operações mandar a mesma nota de novo (por exemplo, corrigida), a linha é **atualizada**, nunca duplicada.
+- A conferência com o extrato do banco e a baixa automática (situação **Pago**) ficam para o próximo passo.
+- Quem vê a tela: quem tem a permissão **Transferências** (o administrador já tem).
+
+**Como ligar:** o Fin Pro e a Operações precisam do **mesmo token** (uma senha longa, só para isso). No Fin Pro ele vai
+na variável `OPERACOES_TOKEN` (no `.env` ou no Easypanel); sem ela, a entrada fica desligada e a Operações recebe o aviso.
+
+Para quem programa: `POST /api/integracao/operacoes/notas`, `multipart/form-data`, cabeçalho
+`Authorization: Bearer <token>`. Campos: `origem_id` (obrigatório, inteiro), `nota` e `empresa` (obrigatórios),
+`pedido`, `valor` (ponto decimal, pode vir vazio), `material`, `emitida_em` (`AAAA-MM-DD` ou `AAAA-MM-DD HH:MM:SS`),
+`forma` (`pix` ou `transferencia`), `chave` (44 dígitos, pode vir vazia) e `arquivo` (PDF, até 10 MB). Respostas:
+201 criada, 200 atualizada, 401 token errado, 422 dado inválido (`{"ok": false, "erro": "..."}`), 503 sem o token.
+Dados em `dados\transferencias.db`, com a planilha `transferencias.xlsx`.
+
 ---
 
 ## 14. Notificações
@@ -766,6 +790,7 @@ os botões **Atualizar a planilha agora** e **Limpar os logs**.
 | Empresas | Notas fiscais, cheques, recebimentos e fechamentos |
 | Caixa | Entradas e saídas em dinheiro |
 | Diesel | Compras, abastecimentos, máquinas e relatórios do diesel |
+| Transferências | Ver as notas pagas por Pix ou TED/DOC que a Operações manda e abrir o PDF |
 | Avisos | Configurar os lembretes |
 | Configurações | Backup, bots, importação e acesso pela rede |
 
@@ -810,7 +835,7 @@ Regras comuns:
 
 ## 19. Banco de dados, planilhas, arquivos e backup
 
-- Os dados ficam em **bancos SQLite** (`boletos.db`, `empresas.db`, `diesel.db`): gravação instantânea e segura.
+- Os dados ficam em **bancos SQLite** (`boletos.db`, `empresas.db`, `diesel.db`, `transferencias.db`): gravação instantânea e segura.
 - As **planilhas Excel** continuam existindo e são geradas sozinhas poucos segundos depois de cada alteração.
 - **Planilha aberta no Excel não trava nada**: é atualizada quando o arquivo for fechado.
 - **Edições feitas no Excel** em lançamentos existentes voltam para o sistema, sem desfazer o que foi gravado nesse meio-tempo.
@@ -824,7 +849,7 @@ Dentro da pasta escolhida é criada a pasta `Leitor de Boletos - Backup` com:
 
 | Parte | O que guarda | Como é copiada |
 |---|---|---|
-| `planilha` | Os três bancos de dados (boletos, empresas, diesel) e as planilhas Excel | Uma cópia por dia; guarda os últimos 30 dias (ajustável) |
+| `planilha` | Os quatro bancos de dados (boletos, empresas, diesel, transferências) e as planilhas Excel | Uma cópia por dia; guarda os últimos 30 dias (ajustável) |
 | `arquivos` | Boletos, comprovantes, cupons do caixa, canhotos do diesel, fotos | Só o que é novo ou mudou |
 | `configuracoes` | Todas as configurações (lembretes, usuários, bots, preços, modelos de importação) e o `.env` | Sempre |
 | `codigo` | O código-fonte do sistema | Só o que mudou; o que saiu do sistema sai do backup |
@@ -882,6 +907,8 @@ O **programa** (código-fonte) fica guardado em versões, como "fotografias" num
 - Tokens dos bots aparecem mascarados nas telas.
 - Os arquivos de configuração com tokens e senhas de app ficam na pasta `dados`: o computador precisa estar protegido.
 - Apenas a análise com IA (quando ligada e acionada) envia um arquivo para fora (API da Anthropic).
+- A entrada da Operações (seção 13.6) é a única parte da API que não pede login: ela só aceita quem manda o
+  token `OPERACOES_TOKEN`, conferido no servidor. Sem o token configurado, ela fica desligada.
 
 ---
 

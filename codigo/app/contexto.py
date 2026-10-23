@@ -17,6 +17,7 @@ from .empresas.configuracao import ConfigEmpresas
 from .diesel.modelos import ABAS_DIESEL
 from .empresas.modelos import ABAS_EMPRESAS
 from .repositorio import FonteLembretes, RepositorioBoletos
+from .transferencias.modelos import ABAS_TRANSFERENCIAS
 from .tarefas import GerenciadorTarefas
 
 planilha = BancoBoletos(config.DADOS_DIR / "boletos.db", config.PLANILHA_PATH, config.BACKUPS_DIR)
@@ -41,6 +42,10 @@ empresas_entrada = None  # CaixaNotas: bot de notas fiscais (criada em app.main)
 diesel = BancoBoletos(config.DADOS_DIR / "diesel.db", config.DIESEL_PATH, config.BACKUPS_DIR,
                       abas=ABAS_DIESEL, centros=False, nome_backup="diesel")
 diesel_bot = None  # BotDiesel: canhotos e comprovantes de compra pelo Telegram (criado em app.main)
+
+# Transferências de clientes: notas pagas por Pix ou TED/DOC, enviadas pela Operações — banco e planilha próprios
+transferencias = BancoBoletos(config.DADOS_DIR / "transferencias.db", config.TRANSFERENCIAS_PATH, config.BACKUPS_DIR,
+                              abas=ABAS_TRANSFERENCIAS, centros=False, nome_backup="transferencias")
 
 
 def link_notificacao(rota: str) -> str:
@@ -76,7 +81,9 @@ backup = modulo_backup.GerenciadorBackup(config.DADOS_DIR / "backup.json", confi
                                        extras=[{"nome": "empresas", "planilha": config.FECHAMENTOS_PATH,
                                                 "copiar_banco": empresas.copiar_banco},
                                                {"nome": "diesel", "planilha": config.DIESEL_PATH,
-                                                "copiar_banco": diesel.copiar_banco}],
+                                                "copiar_banco": diesel.copiar_banco},
+                                               {"nome": "transferencias", "planilha": config.TRANSFERENCIAS_PATH,
+                                                "copiar_banco": transferencias.copiar_banco}],
                                        # backup total: também o código-fonte e o histórico de versões
                                        pasta_codigo=config.BASE_DIR, informar_versao=modulo_versao.carimbo,
                                        gerar_bundle=modulo_versao.gerar_bundle,
