@@ -98,7 +98,7 @@ def test_todas_as_telas_abrem_sem_erro(pagina):
         "caixa?aba=bot": "Bot do caixa",
         "diesel": "Saldo do diesel", "diesel?aba=maquinas": "Nenhuma máquina cadastrada",
         "diesel?aba=relatorios": "Relatório semanal", "diesel?aba=conferencia": "Nada para conferir",
-        "diesel?aba=bot": "Quem escolhe a máquina",
+        "diesel?aba=bot": "Quem escolhe a máquina", "transferencias": "Valor somado",
     }
     for rota, texto in telas.items():
         _ir(pagina, rota)

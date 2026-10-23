@@ -26,7 +26,7 @@ from .planilha import PlanilhaBloqueadaError, RegistroNaoEncontrado
 from .rede import GerenciadorRede
 from .rotas import (
     administracao, backup, boletos, busca_comprovantes, caixa as rotas_caixa, comprovantes, diesel as rotas_diesel,
-    empresas as rotas_empresas, entrada, gastos, leitura,
+    empresas as rotas_empresas, entrada, gastos, leitura, transferencias as rotas_transferencias,
     notificacoes as rotas_notificacoes, pix, relatorios, saude, sistema, usuarios,
 )
 
@@ -55,6 +55,8 @@ def _limpar_temporarios() -> None:
         for aba in ("compras", "abastecimentos"):  # comprovantes e canhotos do diesel
             for registro in contexto.diesel.listar(aba):
                 referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
+        for registro in contexto.transferencias.listar():  # PDFs das notas enviadas pela Operações
+            referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
         if contexto.caixa_entrada is not None:
             referenciados |= contexto.caixa_entrada.arquivos_em_uso()
         if contexto.empresas_entrada is not None:
@@ -154,6 +156,10 @@ async def lifespan(_app: FastAPI):
         contexto.diesel.garantir()  # banco do diesel + planilha diesel.xlsx
     except Exception:
         log.exception("Falha ao preparar o banco de dados do diesel")
+    try:
+        contexto.transferencias.garantir()  # banco das transferências de clientes + planilha transferencias.xlsx
+    except Exception:
+        log.exception("Falha ao preparar o banco de dados das transferências")
     _limpar_temporarios()
     try:
         if contexto.caixa_entrada.concluir_ja_lancados():
@@ -172,6 +178,7 @@ async def lifespan(_app: FastAPI):
         contexto.planilha.iniciar_sincronizacao()  # mantém a planilha Excel igual ao banco
     contexto.empresas.iniciar_sincronizacao()
     contexto.diesel.iniciar_sincronizacao()
+    contexto.transferencias.iniciar_sincronizacao()
     if config.NOTIFICACOES_AUTOMATICAS:
         contexto.empresas_entrada.iniciar_agendador()  # bot de notas fiscais e envio do fechamento
         contexto.caixa_bot.iniciar_agendador()  # bot do caixa (cupons de gastos em dinheiro)
@@ -194,6 +201,7 @@ async def lifespan(_app: FastAPI):
     contexto.diesel_bot.parar()
     contexto.empresas.parar()
     contexto.diesel.parar()
+    contexto.transferencias.parar()
     contexto.backup.parar()
     contexto.fila.parar()
     if hasattr(contexto.planilha, "parar"):
@@ -242,7 +250,8 @@ async def _nao_encontrado(request: Request, _exc: RegistroNaoEncontrado):
 
 
 for modulo in (sistema, saude, usuarios, backup, entrada, leitura, boletos, pix, busca_comprovantes, comprovantes, gastos,
-               rotas_empresas, rotas_caixa, rotas_diesel, relatorios, administracao, rotas_notificacoes):
+               rotas_empresas, rotas_caixa, rotas_diesel, rotas_transferencias, relatorios, administracao,
+               rotas_notificacoes):
     app.include_router(modulo.router)
 
 if config.WEB_DIR.exists():

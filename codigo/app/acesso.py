@@ -33,6 +33,8 @@ SEM_PERMISSAO = {"/api/notificacoes/vistos", "/api/notificacoes/dispensar", "/ap
                  "/api/usuarios/minha-senha", "/api/usuarios/eu"}
 ENDERECOS_LOCAIS = {"127.0.0.1", "::1", "localhost", "testclient"}
 ROTAS_LIVRES = {"/api/acesso", "/api/acesso/estado", "/api/acesso/sair", "/api/usuarios/entrar", "/api/usuarios/sair"}
+# Entrada da integração com a Operações: sem login de usuário, porque a própria rota confere o token (OPERACOES_TOKEN)
+ROTA_INTEGRACAO = ("POST", "/api/integracao/operacoes/notas")
 NOME_COMPUTADOR = "Computador principal"
 NOME_REDE = "Acesso pela rede"
 VALIDADE_COOKIE = 30 * 24 * 3600
@@ -80,7 +82,7 @@ def permissao_da_rota(metodo: str, caminho: str) -> str | None:
         return None
     telas = (("/api/gastos", "gastos"), ("/api/relatorios", "gastos"), ("/api/empresas", "empresas"),
              ("/api/notas", "empresas"), ("/api/cheques", "empresas"), ("/api/recebimentos", "empresas"),
-             ("/api/caixa", "caixa"), ("/api/diesel", "diesel"))
+             ("/api/caixa", "caixa"), ("/api/diesel", "diesel"), ("/api/transferencias", "transferencias"))
     for prefixo, permissao in telas:  # essas telas são restritas para ver e para mexer
         if caminho.startswith(prefixo):
             return permissao
@@ -192,6 +194,10 @@ async def entrar(senha: str, ip: str) -> tuple[bool, str | None, int]:
 async def middleware(request: Request, call_next):
     caminho = request.url.path
     if not caminho.startswith("/api/"):
+        return await call_next(request)
+    if (request.method, caminho) == ROTA_INTEGRACAO:
+        request.state.usuario = None
+        request.state.usuario_nome = "Operações"
         return await call_next(request)
     local = requisicao_local(request)
     usuario = usuario_do_cookie(request)

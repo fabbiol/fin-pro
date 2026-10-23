@@ -3,7 +3,7 @@
 Uma vez por dia, depois do horário escolhido, o sistema copia para ``<pasta escolhida>/Leitor de Boletos - Backup``
 **tudo o que é preciso para reerguer o Fin Pro em outro computador**:
 
-* ``planilha/``       — uma cópia por dia de cada banco de dados (``boletos``, ``empresas``, ``diesel``) e de cada planilha;
+* ``planilha/``       — uma cópia por dia de cada banco de dados (``boletos``, ``empresas``, ``diesel``, ``transferencias``) e de cada planilha;
 * ``arquivos/``       — PDFs, fotos, comprovantes, cupons, canhotos, cheques e notas (só copia o que é novo ou mudou);
 * ``configuracoes/``  — **todos** os arquivos de configuração da pasta de dados (lembretes, usuários, bots, preços…)
   e o ``.env``;
@@ -48,7 +48,7 @@ INTERVALO_VERIFICACAO = 300
 ESPERA_APOS_FALHA = timedelta(minutes=30)
 ESPERA_APOS_FALHA_PACOTE = timedelta(hours=6)
 DIAS_PARA_ALERTA = 2
-RE_COPIA = re.compile(r"^(?:boletos|empresas|diesel)-(\d{4}-\d{2}-\d{2})\.(xlsx|db)$")
+RE_COPIA = re.compile(r"^(?:boletos|empresas|diesel|transferencias)-(\d{4}-\d{2}-\d{2})\.(xlsx|db)$")
 RE_PACOTE = re.compile(r"^Fin Pro - backup completo (\d{4}-\d{2}-\d{2})_(\d{4})\.zip$")
 # O que NÃO é código: ambiente Python (reinstalável), caches, o repositório (vai no bundle) e as pastas de dados.
 PASTAS_FORA_DO_CODIGO = {".venv", "venv", "__pycache__", ".pytest_cache", ".git", "node_modules", NOME_PASTA}
@@ -64,7 +64,7 @@ LEIA_ME = """BACKUP COMPLETO DO FIN PRO
 Esta pasta é criada e atualizada automaticamente pelo Fin Pro (uma vez por dia). Ela tem TUDO o que é preciso para
 colocar o sistema para funcionar de novo em outro computador:
 
-  planilha\\         uma cópia por dia de cada banco de dados (boletos, empresas, diesel) e de cada planilha Excel
+  planilha\\         uma cópia por dia de cada banco de dados (boletos, empresas, diesel, transferencias) e de cada planilha
   arquivos\\         PDFs e fotos dos boletos, comprovantes, cupons do caixa, canhotos do diesel, cheques e notas
   configuracoes\\    lembretes, usuários, bots do Telegram, preços, e o arquivo .env
   codigo\\           o código-fonte completo do sistema (o programa em si)
@@ -86,7 +86,7 @@ COMO RESTAURAR À MÃO (se preferir)
 2. Dentro dela, crie a pasta "dados".
 3. Em "planilha", pegue a cópia mais recente de cada banco e copie para "dados" com estes nomes:
       boletos-DATA.db  -> dados\\boletos.db       empresas-DATA.db -> dados\\empresas.db
-      diesel-DATA.db   -> dados\\diesel.db
+      diesel-DATA.db   -> dados\\diesel.db         transferencias-DATA.db -> dados\\transferencias.db
    (as planilhas Excel são refeitas sozinhas; as cópias .xlsx daqui abrem direto no Excel.)
 4. Copie a pasta "arquivos" inteira para dentro de "dados".
 5. Copie os arquivos .json de "configuracoes" para dentro de "dados", e o ".env" para a pasta do sistema.
