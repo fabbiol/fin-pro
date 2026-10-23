@@ -11,6 +11,8 @@ services:
       LEITOR_DADOS_DIR: "/app/dados"
       LEITOR_BACKUP_PASTA: "/backup"
       TZ: "America/Cuiaba"
+      # Senha da integração com a Operações (aba Transferências de clientes).
+      OPERACOES_TOKEN: ${OPERACOES_TOKEN:-}
     volumes:
       - /opt/finpro/dados:/app/dados
       # Pasta do backup total, fora da pasta de dados como o backup exige (na VPS: /opt/finpro/backup). O sistema
