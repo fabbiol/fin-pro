@@ -665,9 +665,9 @@ Dados em `dados\empresas.db`, com a planilha `fechamentos.xlsx` (abas Empresas, 
 Quando a nota de um cliente vai ser paga por **Pix** ou **TED/DOC**, a Operações (o sistema da pedreira) manda a nota
 sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, separada de Empresas:
 
-- Tabela com **Nota, Pedido, Empresa, Valor e Material**, a data de emissão, a forma (Pix ou TED/DOC), a situação
+- Tabela com **Nota, Pedido, Cliente, Valor e Material**, a data de emissão, a forma (Pix ou TED/DOC), a situação
   **Aguardando pagamento** e o botão **Abrir PDF** da nota.
-- Filtros por empresa e situação, e busca pelo número da nota.
+- Filtros por cliente e situação, e busca pelo número da nota.
 - Se a Operações mandar a mesma nota de novo (por exemplo, corrigida), a linha é **atualizada**, nunca duplicada.
 - A conferência com o extrato do banco e a baixa automática (situação **Pago**) ficam para o próximo passo.
 - Quem vê a tela: quem tem a permissão **Transferências** (o administrador já tem).
