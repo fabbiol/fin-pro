@@ -17,7 +17,7 @@ export async function montar(el) {
         <label class="busca">${icone("busca", 16)}
           <input id="t-busca" class="input" type="search" value="${esc(filtros.q)}" autocomplete="off"
             placeholder="Buscar pelo número da nota" aria-label="Buscar pelo número da nota"></label>
-        <select id="t-empresa" class="input input-sm" aria-label="Empresa"><option value="">Todas as empresas</option></select>
+        <select id="t-empresa" class="input input-sm" aria-label="Cliente"><option value="">Todos os clientes</option></select>
         <select id="t-situacao" class="input input-sm" aria-label="Situação"><option value="">Todas as situações</option></select>
       </div>
     </section>
@@ -87,12 +87,12 @@ function desenharTabela(linhas) {
     return;
   }
   alvo.innerHTML = `<table class="tabela">
-    <thead><tr><th>Nota</th><th>Pedido</th><th>Empresa</th><th class="num">Valor</th><th>Material</th>
+    <thead><tr><th>Nota</th><th>Pedido</th><th>Cliente</th><th class="num">Valor</th><th>Material</th>
       <th>Emissão</th><th>Forma</th><th>Situação</th><th class="col-acoes">PDF</th></tr></thead>
     <tbody>${linhas.map((t) => `<tr>
       <td data-rotulo="Nota"><strong>${esc(t.nota)}</strong></td>
       <td data-rotulo="Pedido">${esc(t.pedido || "—")}</td>
-      <td data-rotulo="Empresa">${esc(t.empresa)}</td>
+      <td data-rotulo="Cliente">${esc(t.empresa)}</td>
       <td class="num" data-rotulo="Valor">${brl(t.valor)}</td>
       <td data-rotulo="Material">${esc(t.material || "—")}</td>
       <td data-rotulo="Emissão">${dataBR(t.emitida_em)}</td>
