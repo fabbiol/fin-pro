@@ -187,3 +187,200 @@ def test_pdf_so_para_quem_entrou_com_permissao(sistema, operacoes):
         assert celular.get("/api/transferencias/2/pdf").status_code == 404  # chegou sem PDF
         assert celular.get("/api/transferencias/99/pdf").status_code == 404
         assert celular.get("/api/transferencias").json()["total"] == 2
+
+
+# --------------------------------------------------------------------------- CNPJ/CPF do cliente
+
+
+@pytest.mark.parametrize("enviado, guardado", [("12.345.678/0001-95", "12345678000195"), ("12345678909", "12345678909"),
+                                               ("", ""), (None, "")])
+def test_documento_do_cliente_guardado_so_com_digitos(operacoes, enviado, guardado):
+    assert _enviar(operacoes, documento=enviado).status_code == 201
+    assert contexto.transferencias.listar()[0]["documento"] == guardado
+
+
+@pytest.mark.parametrize("documento", ["123", "1234567890123", "123456789012345", "12A45678909"])
+def test_documento_invalido_recebe_422(operacoes, documento):
+    resposta = _enviar(operacoes, documento=documento)
+    assert resposta.status_code == 422 and "documento" in resposta.json()["erro"]
+    assert contexto.transferencias.listar() == []
+
+
+# --------------------------------------------------------------------------- ligar o pagamento à nota
+
+COMPROVANTE = """Comprovante de transferência
+Pix enviado
+23/10/2026 - 14:05:10
+Valor
+R$ 3.811,20
+Origem
+Nome
+Construtora Sol Ltda
+CNPJ
+12.345.678/0001-95
+Destino
+Nome
+Pedreira Prospera
+ID da transação: E18236120202610231405s0123456789"""
+
+
+def _pdf_texto(texto: str) -> bytes:
+    import io
+
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+
+    buffer = io.BytesIO()
+    folha = canvas.Canvas(buffer, pagesize=A4)
+    for i, linha in enumerate(texto.splitlines()):
+        folha.drawString(40, 800 - 18 * i, linha)
+    folha.save()
+    return buffer.getvalue()
+
+
+@pytest.fixture
+def tela(sistema):
+    """O computador principal (sem login) com três notas aguardando pagamento."""
+    with TestClient(main.app) as computador:
+        for origem, nota in (("1", "100"), ("2", "200"), ("3", "300")):
+            assert _enviar(computador, origem_id=origem, nota=nota, valor="1905.60").status_code == 201
+        yield computador
+
+
+def _ler(cliente, texto=COMPROVANTE):
+    resposta = cliente.post("/api/transferencias/pagamentos/ler",
+                            files={"arquivo": ("comprovante.pdf", _pdf_texto(texto), "application/pdf")})
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
+
+
+def _ligar(cliente, ids, arquivo, **troca):
+    corpo = {"ids": ids, "arquivo": arquivo, "valor": 3811.20, "data": "2026-10-23", "pagador": "Construtora Sol Ltda",
+             "documento_pagador": "12.345.678/0001-95", "id_transacao": "E18236120202610231405s0123456789",
+             "observacao": "Pago pelo sócio"}
+    corpo.update(troca)
+    return cliente.post("/api/transferencias/pagamentos", json=corpo)
+
+
+def _linhas(cliente):
+    return {t["nota"]: t for t in cliente.get("/api/transferencias").json()["transferencias"]}
+
+
+def test_le_o_comprovante_sem_ligar_nada(tela):
+    lido = _ler(tela)
+    assert (lido["valor"], lido["data"]) == (3811.2, "2026-10-23")
+    assert (lido["pagador"], lido["documento_pagador"]) == ("Construtora Sol Ltda", "12345678000195")
+    assert lido["id_transacao"] == "E18236120202610231405s0123456789" and lido["ja_usado"] is None
+    assert contexto.arquivos.meta(lido["arquivo"])["nome"] == "comprovante.pdf"
+    assert all(t["status"] == "Aguardando pagamento" for t in _linhas(tela).values())
+    foto = tela.post("/api/transferencias/pagamentos/ler", files={"arquivo": ("x.txt", b"texto qualquer", "text/plain")})
+    assert foto.status_code == 422 and foto.json()["detail"]["codigo"] == "comprovante_invalido"
+
+
+def test_liga_varias_notas_a_um_pagamento_e_abre_o_comprovante(tela):
+    lido = _ler(tela)
+    resposta = _ligar(tela, [1, 2, 2], lido["arquivo"])
+    assert resposta.status_code == 201, resposta.text
+    pagamento = resposta.json()["pagamento"]
+    assert pagamento["id"] == 1 and pagamento["notas"] == ["100", "200"] and pagamento["valor"] == 3811.2
+    assert pagamento["documento_pagador"] == "12345678000195" and pagamento["observacao"] == "Pago pelo sócio"
+    assert pagamento["ligado_por"] == "Computador principal" and pagamento["comprovante"] and not pagamento["desfeito"]
+    assert [t["status"] for t in resposta.json()["transferencias"]] == ["Pago", "Pago"]
+
+    linhas = _linhas(tela)
+    assert linhas["100"]["pagamento"] == linhas["200"]["pagamento"] == pagamento
+    assert linhas["100"]["pagamento_id"] == 1 and linhas["300"]["pagamento"] is None
+    assert linhas["300"]["status"] == "Aguardando pagamento"
+
+    aberto = tela.get("/api/transferencias/pagamentos/1/comprovante")
+    assert aberto.status_code == 200 and aberto.headers["content-type"] == "application/pdf"
+    assert aberto.content.startswith(b"%PDF")
+    assert tela.get("/api/transferencias/pagamentos/9/comprovante").status_code == 404
+
+
+def test_liga_uma_nota(tela):
+    resposta = _ligar(tela, [3], _ler(tela)["arquivo"], valor="1905.60", id_transacao="", documento_pagador="")
+    assert resposta.status_code == 201, resposta.text
+    assert resposta.json()["pagamento"]["notas"] == ["300"] and _linhas(tela)["300"]["status"] == "Pago"
+
+
+def test_recusa_nota_paga_inexistente_e_comprovante_repetido(tela):
+    arquivo = _ler(tela)["arquivo"]
+    assert _ligar(tela, [1], arquivo).status_code == 201
+
+    paga = _ligar(tela, [1, 2], arquivo, id_transacao="OUTRO123456")
+    assert paga.status_code == 409 and paga.json()["detail"]["codigo"] == "nota_ja_paga"
+    assert "100" in paga.json()["detail"]["mensagem"]
+
+    repetido = _ligar(tela, [2], arquivo, id_transacao=" e18236120202610231405S0123456789 ")
+    assert repetido.status_code == 409 and repetido.json()["detail"]["codigo"] == "comprovante_repetido"
+    assert _ler(tela)["ja_usado"] == 1  # a tela já avisa ao ler o mesmo comprovante
+
+    sumida = _ligar(tela, [2, 99], arquivo, id_transacao="OUTRO123456")
+    assert sumida.status_code == 404 and sumida.json()["detail"]["codigo"] == "nota_nao_encontrada"
+
+    sem_arquivo = _ligar(tela, [2], "0" * 32, id_transacao="OUTRO123456")
+    assert sem_arquivo.status_code == 404 and sem_arquivo.json()["detail"]["codigo"] == "arquivo_nao_encontrado"
+
+    for troca, codigo in (({"valor": 0}, "valor_invalido"), ({"valor": "abc"}, "valor_invalido"),
+                          ({"data": "23/10/2026"}, "data_invalida"), ({"documento_pagador": "123"}, "documento_invalido")):
+        invalido = _ligar(tela, [2], arquivo, id_transacao="OUTRO123456", **troca)
+        assert invalido.status_code == 422 and invalido.json()["detail"]["codigo"] == codigo
+    assert _ligar(tela, [], arquivo).status_code == 422
+    assert _linhas(tela)["200"]["status"] == "Aguardando pagamento"  # nada pela metade
+    assert len(contexto.transferencias.listar("pagamentos")) == 1
+
+
+def test_desfazer_volta_as_notas_e_guarda_o_pagamento(tela):
+    arquivo = _ler(tela)["arquivo"]
+    assert _ligar(tela, [1, 2], arquivo).status_code == 201
+
+    desfeito = tela.post("/api/transferencias/pagamentos/1/desfazer")
+    assert desfeito.status_code == 200, desfeito.text
+    assert desfeito.json()["pagamento"]["desfeito"] is True
+    assert [t["status"] for t in desfeito.json()["transferencias"]] == ["Aguardando pagamento"] * 2
+    linhas = _linhas(tela)
+    assert linhas["100"]["pagamento"] is None and linhas["100"]["pagamento_id"] is None
+
+    [guardado] = contexto.transferencias.listar("pagamentos")
+    assert guardado["status"] == "Desfeito" and guardado["desfeito_por"] == "Computador principal"
+    assert tela.get("/api/transferencias/pagamentos/1/comprovante").status_code == 200  # o comprovante fica no histórico
+    de_novo = tela.post("/api/transferencias/pagamentos/1/desfazer")
+    assert de_novo.status_code == 409 and de_novo.json()["detail"]["codigo"] == "pagamento_ja_desfeito"
+    assert tela.post("/api/transferencias/pagamentos/9/desfazer").status_code == 404
+
+    # o mesmo comprovante pode ser ligado de novo, agora às notas certas
+    religado = _ligar(tela, [2, 3], arquivo)
+    assert religado.status_code == 201 and religado.json()["pagamento"]["id"] == 2
+
+
+def test_reenvio_da_operacoes_nao_muda_o_pagamento(tela):
+    assert _ligar(tela, [1], _ler(tela)["arquivo"]).status_code == 201
+    reenvio = _enviar(tela, origem_id="1", nota="100", valor="2000.00", documento="12345678909")
+    assert reenvio.status_code == 200
+    linha = _linhas(tela)["100"]
+    assert linha["status"] == "Pago" and linha["pagamento_id"] == 1 and linha["documento"] == "12345678909"
+
+
+def test_ligar_so_com_login_e_permissao(sistema, tela):
+    arquivo = _ler(tela)["arquivo"]
+    sistema.criar("Almir", "almir", "almir-2026", permissoes=["lancar", "pagar"])
+    sistema.criar("Rosa", "rosa", "rosa-2026", permissoes=["transferencias"])
+    pdf = {"arquivo": ("c.pdf", _pdf_texto(COMPROVANTE), "application/pdf")}
+
+    with TestClient(main.app, client=CELULAR) as celular:
+        assert celular.post("/api/transferencias/pagamentos/ler", files=pdf).status_code == 401
+        assert _ligar(celular, [1], arquivo).status_code == 401
+        _entrar(celular, "almir", "almir-2026")
+        for resposta in (celular.post("/api/transferencias/pagamentos/ler", files=pdf), _ligar(celular, [1], arquivo),
+                         celular.post("/api/transferencias/pagamentos/1/desfazer"),
+                         celular.get("/api/transferencias/pagamentos/1/comprovante")):
+            assert resposta.status_code == 403 and resposta.json()["detail"]["permissao"] == "transferencias"
+
+    with TestClient(main.app, client=CELULAR) as celular:
+        _entrar(celular, "rosa", "rosa-2026")
+        ligado = _ligar(celular, [1], arquivo)
+        assert ligado.status_code == 201 and ligado.json()["pagamento"]["ligado_por"] == "Rosa"
+        assert celular.get("/api/transferencias/pagamentos/1/comprovante").status_code == 200
+        assert celular.post("/api/transferencias/pagamentos/1/desfazer").status_code == 200
+    assert len(contexto.transferencias.listar("pagamentos")) == 1
