@@ -1161,6 +1161,9 @@ body.arrastando .soltar-overlay { display: grid; }
   .celula-benef { max-width: none; }
   .linha-copiar { max-width: 100%; }
   .toasts { left: 12px; right: 12px; align-items: stretch; }
+  /* Transferências: com notas marcadas, o "Ligar pagamento" fica preso embaixo da tela, longe da lista comprida */
+  .lp-lote:not([hidden]) { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; border-top: 1px solid var(--borda); box-shadow: 0 -6px 18px rgba(0, 0, 0, .18); }
+  .tabela-card:has(.lp-lote:not([hidden])) { margin-bottom: 72px; }
 }
 
 /* ------------------------------------------------------------------ Pix */
@@ -1362,6 +1365,18 @@ body.arrastando .soltar-overlay { display: grid; }
 .det-comprovante { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px; border: 1px dashed var(--borda-forte); border-radius: var(--raio-sm); color: var(--texto-2); }
 .det-comprovante.tem { border-style: solid; border-color: var(--marca); background: var(--marca-suave); color: var(--texto); }
 .det-comp-info { display: flex; flex-direction: column; flex: 1; min-width: 180px; }
+
+/* Transferências de clientes · ligar pagamento: notas marcadas e a soma */
+.lp-notas { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--borda); border-radius: var(--raio-sm); }
+.lp-notas li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; padding: 8px 12px; border-bottom: 1px solid var(--borda); }
+.lp-notas li:last-child { border-bottom: 0; }
+.lp-notas .sutil { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-notas .num { font-variant-numeric: tabular-nums; font-weight: 650; white-space: nowrap; }
+.lp-notas .lp-soma { background: var(--superficie-2); }
+.lp-campos { margin-top: 14px; }
+.lp-campos > :empty { display: none; }
+.lp-link-nota { white-space: nowrap; }
+.tabela .lp-situacao { min-width: 190px; }
 .det-titulo { display: flex; align-items: center; gap: 6px; margin: 18px 0 8px; font-size: 14px; }
 .det-linha-tempo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .det-linha-tempo li { display: flex; gap: 10px; align-items: flex-start; }

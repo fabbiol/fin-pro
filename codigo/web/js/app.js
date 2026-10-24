@@ -28,7 +28,7 @@ const ROTAS = {
   gastos: { titulo: "Gastos", subtitulo: "Onde o dinheiro foi gasto: análise por centro de custo de boletos, Pix e caixa", view: gastos },
   caixa: { titulo: "Caixa", subtitulo: "Dinheiro que entra e que sai: por dia, semana, mês ou ano, com os relatórios", view: caixa },
   empresas: { titulo: "Empresas", subtitulo: "Vendas a prazo: notas fiscais, cheques, recebimentos e o fechamento de cada cliente", view: empresas },
-  transferencias: { titulo: "Transferências de clientes", subtitulo: "Notas pagas por Pix ou TED/DOC que a Operações manda, aguardando o pagamento", view: transferencias },
+  transferencias: { titulo: "Transferências de clientes", subtitulo: "Notas pagas por Pix ou TED/DOC que a Operações manda. Marque as notas e ligue o comprovante do pagamento", view: transferencias },
   notificacoes: { titulo: "Notificações", subtitulo: "Avisos de boletos e Pix a vencer no Windows, no Telegram e por e-mail", view: notificacoes },
   config: { titulo: "Configurações", subtitulo: "Aplicativo, usuários, backup, integrações e saúde do sistema", view: configuracoes },
 };

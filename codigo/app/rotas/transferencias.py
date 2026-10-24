@@ -1,12 +1,15 @@
-"""API das transferências de clientes: a entrada da integração com a Operações (só com o token) e a tela."""
+"""API das transferências de clientes: a entrada da integração com a Operações (só com o token), a tela e o ligar
+pagamento (comprovante Pix/TED ligado a uma ou mais notas)."""
 
 from __future__ import annotations
 
 import hmac
 import logging
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Request
+from fastapi import UploadFile as Upload
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel, Field
 from starlette.datastructures import UploadFile
 
 from .. import config
@@ -14,10 +17,24 @@ from .. import contexto as ctx
 from ..arquivos import RepositorioArquivos
 from ..planilha import RegistroNaoEncontrado
 from ..transferencias import servico
-from .comum import erro
+from .comprovantes import _validar as validar_comprovante
+from .comum import autor, erro
+from .leitura import ler_upload, visualizar_arquivo
 
 log = logging.getLogger(__name__)
 router = APIRouter(tags=["transferencias"])
+
+
+class LigarEntrada(BaseModel):
+    """O que o dono conferiu na tela (valor e data podem ter sido corrigidos à mão)."""
+    ids: list[int] = Field(..., min_length=1, max_length=500)
+    arquivo: str = Field(..., max_length=40)
+    valor: float | str | None = None
+    data: str | None = Field(None, max_length=10)
+    pagador: str | None = Field(None, max_length=200)
+    documento_pagador: str | None = Field(None, max_length=30)
+    id_transacao: str | None = Field(None, max_length=120)
+    observacao: str | None = Field(None, max_length=500)
 
 
 def _falha(status: int, mensagem: str, **extra) -> JSONResponse:
@@ -72,3 +89,48 @@ def abrir_pdf(id_: int):
         raise erro(404, "arquivo_nao_encontrado", "Esta nota chegou sem o PDF.")
     return FileResponse(caminho, media_type="application/pdf", filename=registro.get("arquivo_nome") or f"NF {registro['nota']}.pdf",
                         content_disposition_type="inline")
+
+
+# --------------------------------------------------------------------------- ligar o pagamento à nota
+
+
+@router.post("/api/transferencias/pagamentos/ler")
+def ler_comprovante(arquivo: Upload = File(...)):
+    """Guarda o comprovante e devolve o que foi lido, para o dono conferir. Ainda não liga nada."""
+    dados = ler_upload(arquivo)
+    validar_comprovante(dados)
+    meta = ctx.arquivos.salvar(dados, arquivo.filename or "comprovante")
+    lido = servico.ler_comprovante(dados)
+    repetido = servico.pagamento_com_id(lido["id_transacao"] or "")
+    return {**lido, "arquivo": meta["id"], "arquivo_nome": meta["nome"], "ja_usado": repetido["id"] if repetido else None}
+
+
+def _pagamento(funcao, *args):
+    try:
+        pagamento, notas = funcao(*args)
+    except servico.ErroPagamento as exc:
+        raise erro(exc.status, exc.codigo, str(exc)) from None
+    return {"pagamento": pagamento, "transferencias": notas}
+
+
+@router.post("/api/transferencias/pagamentos", status_code=201)
+def ligar_pagamento(entrada: LigarEntrada, request: Request):
+    resposta = _pagamento(servico.ligar, entrada.ids, entrada.arquivo, entrada.model_dump(), autor(request))
+    log.info("Pagamento %s ligado às notas %s (%s)", resposta["pagamento"]["id"], resposta["pagamento"]["notas"], autor(request))
+    return resposta
+
+
+@router.get("/api/transferencias/pagamentos/{id_}/comprovante")
+def abrir_comprovante(id_: int):
+    arquivo_id = servico.comprovante_do_pagamento(id_)
+    if not arquivo_id:
+        raise erro(404, "sem_comprovante", "Comprovante não encontrado.")
+    return visualizar_arquivo(arquivo_id)
+
+
+@router.post("/api/transferencias/pagamentos/{id_}/desfazer")
+def desfazer_pagamento(id_: int, request: Request):
+    """As notas voltam a Aguardando pagamento; o pagamento fica guardado como desfeito (com o comprovante)."""
+    resposta = _pagamento(servico.desfazer, id_, autor(request))
+    log.info("Pagamento %s desfeito (%s)", id_, autor(request))
+    return resposta

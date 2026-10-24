@@ -57,6 +57,8 @@ def _limpar_temporarios() -> None:
                 referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
         for registro in contexto.transferencias.listar():  # PDFs das notas enviadas pela Operações
             referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
+        for registro in contexto.transferencias.listar("pagamentos"):  # comprovantes ligados às notas (e os desfeitos)
+            referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("comprovante")))
         if contexto.caixa_entrada is not None:
             referenciados |= contexto.caixa_entrada.arquivos_em_uso()
         if contexto.empresas_entrada is not None:

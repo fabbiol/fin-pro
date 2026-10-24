@@ -169,6 +169,37 @@ def extrair(texto: str, codigos: list[str] | None = None, hoje: date | None = No
     }
 
 
+ROTULO_PAGADOR = r"pagador|remetente|quem pagou|^pago por\b|^origem\b|^de\b"
+ROTULO_ID_TRANSACAO = (r"id d[ae] transacao|id/transacao|identificador|end to end|end-to-end|\be2e\b|"
+                       r"codigo d[ae] (transacao|autenticacao)|autenticacao|numero de controle")
+RE_E2E = re.compile(r"\bE\d{20}[A-Za-z0-9]{11}\b")  # ID de um Pix (end-to-end), com ou sem rótulo
+
+
+def _id_transacao(texto: str) -> str | None:
+    m = re.search(r"[A-Za-z0-9][A-Za-z0-9.\-/]{5,}", texto or "")
+    return m.group(0)[:80] if m and re.search(r"\d", m.group(0)) else None
+
+
+def pagador(texto: str) -> dict:
+    """Quem pagou (nome e CPF/CNPJ do bloco do pagador) e o ID da transação, para ligar o comprovante a uma nota."""
+    linhas = _linhas(texto)
+    documento = None
+    for i, linha in enumerate(linhas):
+        if not re.search(ROTULO_PAGADOR, normalizar(linha)):
+            continue
+        for seguinte in linhas[i:i + 6]:  # o CPF/CNPJ vem logo abaixo do nome, antes do bloco de quem recebeu
+            if seguinte is not linha and re.search(ROTULO_NOME, normalizar(seguinte)):
+                break
+            m = RE_CNPJ.search(seguinte) or RE_CPF.search(seguinte)
+            if m:
+                documento = somente_digitos(m.group(0))
+                break
+        break
+    e2e = RE_E2E.search(texto or "")
+    return {"pagador": _apos_rotulo(linhas, ROTULO_PAGADOR, _nome, janela=2), "documento_pagador": documento,
+            "id_transacao": _apos_rotulo(linhas, ROTULO_ID_TRANSACAO, _id_transacao, janela=1) or (e2e.group(0) if e2e else None)}
+
+
 # --------------------------------------------------------------------------- de qual lançamento é
 
 

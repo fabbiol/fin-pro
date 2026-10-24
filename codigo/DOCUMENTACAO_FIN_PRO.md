@@ -665,12 +665,26 @@ Dados em `dados\empresas.db`, com a planilha `fechamentos.xlsx` (abas Empresas, 
 Quando a nota de um cliente vai ser paga por **Pix** ou **TED/DOC**, a Operações (o sistema da pedreira) manda a nota
 sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, separada de Empresas:
 
-- Tabela com **Nota, Pedido, Cliente, Valor e Material**, a data de emissão, a forma (Pix ou TED/DOC), a situação
-  **Aguardando pagamento** e o botão **Abrir PDF** da nota.
+- Tabela com **Nota, Pedido, Cliente (com o CNPJ/CPF da nota), Valor e Material**, a data de emissão, a forma (Pix ou
+  TED/DOC), a situação (**Aguardando pagamento** ou **Pago**) e o PDF da nota (toque no número da nota).
 - Filtros por cliente e situação, e busca pelo número da nota.
-- Se a Operações mandar a mesma nota de novo (por exemplo, corrigida), a linha é **atualizada**, nunca duplicada.
-- A conferência com o extrato do banco e a baixa automática (situação **Pago**) ficam para o próximo passo.
-- Quem vê a tela: quem tem a permissão **Transferências** (o administrador já tem).
+- Se a Operações mandar a mesma nota de novo (por exemplo, corrigida), a linha é **atualizada**, nunca duplicada. Isso
+  não muda a situação nem o pagamento já ligado.
+- Quem vê e mexe na tela: quem tem a permissão **Transferências** (o administrador já tem).
+
+**Ligar o pagamento:** quem paga por transferência nem sempre é a pessoa da nota. Então o pagamento é ligado à mão:
+
+1. Marque uma ou mais notas **Aguardando pagamento** e envie o comprovante (PDF ou foto, por exemplo o que chegou pelo
+   WhatsApp).
+2. O Fin Pro lê o comprovante e mostra o **valor, a data, quem pagou, o CNPJ/CPF de quem pagou e o ID da transação**,
+   com a soma das notas marcadas. Confira e corrija o que precisar (dá para escrever uma observação).
+3. Confirme: as notas passam a **Pago**. Fica guardado quem ligou e quando, e o comprovante abre com um toque.
+
+Um comprovante pode pagar várias notas, mas o **mesmo comprovante** (mesmo ID da transação) não pode ser ligado duas
+vezes: o Fin Pro avisa já na leitura. Nota que já está paga também não entra. Ligou errado? **Desfazer** volta todas as
+notas daquele pagamento para **Aguardando pagamento**; o pagamento e o comprovante continuam guardados como "desfeito",
+e o comprovante pode ser ligado de novo às notas certas. A conferência com o extrato do banco e a marcação automática
+ficam para o próximo passo.
 
 **Como ligar:** o Fin Pro e a Operações precisam do **mesmo token** (uma senha longa, só para isso). No Fin Pro ele vai
 na variável `OPERACOES_TOKEN` (no `.env` ou no Easypanel); sem ela, a entrada fica desligada e a Operações recebe o aviso.
@@ -678,9 +692,16 @@ na variável `OPERACOES_TOKEN` (no `.env` ou no Easypanel); sem ela, a entrada f
 Para quem programa: `POST /api/integracao/operacoes/notas`, `multipart/form-data`, cabeçalho
 `Authorization: Bearer <token>`. Campos: `origem_id` (obrigatório, inteiro), `nota` e `empresa` (obrigatórios),
 `pedido`, `valor` (ponto decimal, pode vir vazio), `material`, `emitida_em` (`AAAA-MM-DD` ou `AAAA-MM-DD HH:MM:SS`),
-`forma` (`pix` ou `transferencia`), `chave` (44 dígitos, pode vir vazia) e `arquivo` (PDF, até 10 MB). Respostas:
-201 criada, 200 atualizada, 401 token errado, 422 dado inválido (`{"ok": false, "erro": "..."}`), 503 sem o token.
-Dados em `dados\transferencias.db`, com a planilha `transferencias.xlsx`.
+`forma` (`pix` ou `transferencia`), `chave` (44 dígitos, pode vir vazia), `documento` (CNPJ/CPF do cliente: 11 ou 14
+dígitos, a pontuação é tirada; pode vir vazio) e `arquivo` (PDF, até 10 MB). Respostas: 201 criada, 200 atualizada,
+401 token errado, 422 dado inválido (`{"ok": false, "erro": "..."}`), 503 sem o token.
+
+Rotas da tela (com login e a permissão `transferencias`): `POST /api/transferencias/pagamentos/ler` (comprovante em
+`arquivo`; devolve o que leu, o `arquivo` guardado e `ja_usado`), `POST /api/transferencias/pagamentos` (JSON com `ids`
+das notas, `arquivo`, `valor`, `data`, `pagador`, `documento_pagador`, `id_transacao`, `observacao`; recusa com 409
+`nota_ja_paga` ou `comprovante_repetido` e 404 `nota_nao_encontrada`), `GET /api/transferencias/pagamentos/{id}/comprovante`
+e `POST /api/transferencias/pagamentos/{id}/desfazer`.
+Dados em `dados\transferencias.db`, com a planilha `transferencias.xlsx` (abas **Transferências** e **Pagamentos**).
 
 ---
 
