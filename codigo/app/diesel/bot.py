@@ -78,6 +78,7 @@ class BotDiesel:
             from .leitura import analisar as ler
         self.ler = ler
         self._lock = threading.RLock()
+        self._lancando: set[str] = set()  # itens sendo lançados agora (não vai para o arquivo)
         self._verificando = threading.Lock()
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
@@ -240,6 +241,18 @@ class BotDiesel:
         return self._lancar(item, tipo, juntos, usuario)
 
     def _lancar(self, item: dict, tipo: str, dados: dict, usuario: str) -> dict:
+        # A tela e o Telegram ao mesmo tempo (ou dois cliques): só o primeiro lança.
+        with self._lock:
+            if item["estado"] not in ABERTOS or item["id"] in self._lancando:
+                raise servico.ErroDiesel("Este arquivo já foi lançado ou está sendo lançado agora.")
+            self._lancando.add(item["id"])
+        try:
+            return self._gravar_lancamento(item, tipo, dados, usuario)
+        finally:
+            with self._lock:
+                self._lancando.discard(item["id"])
+
+    def _gravar_lancamento(self, item: dict, tipo: str, dados: dict, usuario: str) -> dict:
         arquivo = copy.deepcopy(item.get("arquivo"))
         comum = {k: dados.get(k) for k in ("data", "hora", "posto", "documento", "pessoa", "forma") if dados.get(k)}
         linhas = dados.get("itens") or [{c: dados.get(c) for c in CAMPOS_DA_LINHA}]

@@ -15,6 +15,7 @@ Tratamentos especiais:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections import defaultdict
 from dataclasses import dataclass
@@ -651,7 +652,7 @@ def _converter_campo(nome: str, valor) -> Any:
             return extrair_data(texto)
     if nome == "valor":
         texto = str(valor).strip().replace("R$", "").strip()
-        if "," in texto:
+        if "," in texto or re.fullmatch(r"[1-9]\d{0,2}(\.\d{3})+", texto):  # "1.500" é mil e quinhentos
             texto = texto.replace(".", "").replace(",", ".")
         numero = _decimal(texto)
         return numero if numero is not None and numero > 0 else None

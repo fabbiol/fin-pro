@@ -61,15 +61,20 @@ export function revisarItem(id) {
   if (item) formularioLancamento({ ...item.dados, movimento: "Saída" }, "Saída", enviarItem(id));
 }
 
+const lancando = new Set();  // clique repetido em "Lançar" enquanto o primeiro ainda está indo
+
 export async function lancarItem(id) {
   const item = (tela.conferencia || []).find((i) => i.id === id);
-  if (!item) return;
+  if (!item || lancando.has(id)) return;
+  lancando.add(id);
   try {
     await enviarItem(id)(item.dados);
     toast(`Saída de ${brl(item.dados.valor)} lançada no caixa.`, "ok");
     window.dispatchEvent(new Event("caixa:atualizar"));
   } catch (erro) {
     toast(mensagemErro(erro), "erro", { duracao: 6000 });
+  } finally {
+    lancando.delete(id);
   }
 }
 

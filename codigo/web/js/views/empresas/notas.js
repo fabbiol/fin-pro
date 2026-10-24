@@ -5,6 +5,9 @@ import { abrirModal, brl, confirmar, dataBR, esc, hojeISO, parseValor, toast, ui
 import { carregarDados, deuCerto, numero, opcoes, opcoesCompetencia, opcoesEmpresa, selo, tentar, vazio } from "./comum.js";
 import { STATUS_NOTA, UNIDADES, tela } from "./estado.js";
 
+// Quantidade e valor unitário podem ter 3 casas: vão ao campo com vírgula ("12,345"), que o parseValor não lê como milhar.
+const decimalBR = (v) => (typeof v === "number" ? String(v).replace(".", ",") : v ?? "");
+
 export async function htmlNotas() {
   const resposta = await tentar(() => api.get("/api/notas?limite=500"));
   const notas = resposta?.notas || [];
@@ -51,8 +54,8 @@ function linhaItem(item = {}) {
   return `<tr data-item="${id}">
     <td><input class="input input-sm" name="material" value="${esc(item.material || "")}" placeholder="Brita 01" maxlength="80"></td>
     <td><select class="input input-sm" name="unidade">${opcoes(UNIDADES, item.unidade || "M³")}</select></td>
-    <td><input class="input input-sm num" name="quantidade" inputmode="decimal" value="${item.quantidade ?? ""}"></td>
-    <td><input class="input input-sm num" name="valor_unitario" inputmode="decimal" value="${item.valor_unitario ?? ""}"></td>
+    <td><input class="input input-sm num" name="quantidade" inputmode="decimal" value="${esc(decimalBR(item.quantidade))}"></td>
+    <td><input class="input input-sm num" name="valor_unitario" inputmode="decimal" value="${esc(decimalBR(item.valor_unitario))}"></td>
     <td><input class="input input-sm num" name="valor_total" inputmode="decimal" value="${item.valor_total ?? ""}" placeholder="calculado"></td>
     <td><input class="input input-sm" name="numero_nf" value="${esc(item.numero_nf || "")}" maxlength="15"></td>
     <td><input class="input input-sm" name="pedido" value="${esc(item.pedido || "")}" maxlength="15"></td>
@@ -149,9 +152,9 @@ export async function editarNota(id) {
       <div class="campo"><label for="ne-unidade">Unidade</label>
         <select id="ne-unidade" name="unidade" class="input">${opcoes(UNIDADES, nota.unidade || "M³")}</select></div>
       <div class="campo"><label for="ne-quant">Quantidade</label>
-        <input id="ne-quant" name="quantidade" class="input" inputmode="decimal" value="${nota.quantidade ?? ""}"></div>
+        <input id="ne-quant" name="quantidade" class="input" inputmode="decimal" value="${esc(decimalBR(nota.quantidade))}"></div>
       <div class="campo"><label for="ne-uni">Valor unitário</label>
-        <input id="ne-uni" name="valor_unitario" class="input" inputmode="decimal" value="${nota.valor_unitario ?? ""}"></div>
+        <input id="ne-uni" name="valor_unitario" class="input" inputmode="decimal" value="${esc(decimalBR(nota.valor_unitario))}"></div>
       <div class="campo"><label for="ne-total">Valor total</label>
         <input id="ne-total" name="valor_total" class="input" inputmode="decimal" value="${nota.valor_total ?? ""}"></div>
       <div class="campo"><label for="ne-comp">Fechamento</label>

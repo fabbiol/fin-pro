@@ -94,3 +94,64 @@ def test_edicao_no_excel_volta_para_o_sistema_sem_desfazer_o_que_o_sistema_gravo
     assert banco.obter(1, "pix")["observacoes"] == "pago em dinheiro"
     assert banco.historico_do_registro(1, "boletos")[0]["usuario"] == USUARIO_EXCEL
     assert banco.importar_edicoes_do_excel() == 0  # o mesmo arquivo não é importado de novo
+
+
+def _abrir_excel(caminho):
+    from openpyxl import load_workbook
+    return load_workbook(caminho)
+
+
+def test_coluna_renomeada_ou_apagada_no_excel_nao_apaga_os_dados(tmp_path, planilha_antiga):
+    banco = BancoBoletos(tmp_path / "boletos.db", planilha_antiga.caminho)
+    banco.migrar()
+    banco.exportar()
+    wb = _abrir_excel(planilha_antiga.caminho)
+    ws = wb["Boletos"]
+    titulos = [c.value for c in ws[1]]
+    ws.cell(row=1, column=titulos.index("Valor (R$)") + 1, value="Valor")  # renomeou a coluna
+    ws.delete_cols(titulos.index("Status") + 1)  # apagou a coluna
+    titulos = [c.value for c in ws[1]]
+    ws.cell(row=2, column=titulos.index("Observações") + 1, value="editado no Excel")
+    wb.save(planilha_antiga.caminho)
+
+    assert banco.importar_edicoes_do_excel() == 1  # só a observação
+    assert [(r["valor"], r["status"]) for r in banco.listar()] == [(487.32, "Pendente"), (100.0, "Pago")]
+    assert banco.obter(1)["observacoes"] == "editado no Excel"
+
+
+def test_planilha_que_nao_abre_nao_e_substituida(tmp_path, planilha_antiga):
+    banco = BancoBoletos(tmp_path / "boletos.db", planilha_antiga.caminho)
+    banco.migrar()
+    banco.exportar()
+    planilha_antiga.caminho.write_bytes(b"isto nao e uma planilha")
+
+    assert banco.importar_edicoes_do_excel() == -1
+    assert banco.exportar() is False and banco.exportacao["erro"] and banco.exportacao["pendente"]
+    assert planilha_antiga.caminho.read_bytes() == b"isto nao e uma planilha"  # as edições da pessoa ficam
+    planilha_antiga.caminho.unlink()
+    assert banco.exportar() and banco.exportacao["erro"] is None
+
+
+def test_excel_aberto_nem_monta_a_planilha(tmp_path, planilha_antiga, monkeypatch):
+    banco = BancoBoletos(tmp_path / "boletos.db", planilha_antiga.caminho)
+    banco.migrar()
+    montou = []
+
+    def aberta():
+        raise PlanilhaBloqueadaError("aberta no Excel")
+
+    monkeypatch.setattr(banco.excel, "_verificar_gravavel", aberta)
+    monkeypatch.setattr(banco, "_montar_planilha", lambda: montou.append(1))
+    assert banco.exportar() is False and banco.exportacao["excel_aberto"] and montou == []
+
+
+def test_historico_formata_a_linha_certa(tmp_path, planilha_antiga):
+    banco = BancoBoletos(tmp_path / "boletos.db", planilha_antiga.caminho)
+    banco.migrar()
+    for n in range(3):
+        banco.atualizar(1, {"observacoes": f"nota {n}"}, usuario="Ana")
+    banco.exportar()
+    ws = _abrir_excel(planilha_antiga.caminho)["Histórico"]
+    for linha in range(2, ws.max_row + 1):
+        assert ws.cell(row=linha, column=1).number_format == "dd/mm/yyyy hh:mm"
+        assert ws.cell(row=linha, column=6).number_format == '"R$" #,##0.00'

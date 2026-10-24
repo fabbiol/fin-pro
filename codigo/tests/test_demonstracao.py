@@ -86,3 +86,15 @@ def test_na_demonstracao_nada_e_enviado_para_fora(monkeypatch):
         canais.enviar_telegram("token", "1", "oi")
     with pytest.raises(canais.ErroCanal, match="demonstração"):
         canais.enviar_email({"servidor": "smtp.x", "porta": 587}, "assunto", "texto", "<p>html</p>")
+
+
+def test_demonstracao_nunca_usa_nem_apaga_a_pasta_de_dados_real(tmp_path, monkeypatch):
+    # Como no servidor (Docker); um dicionário à parte para não mudar o ambiente dos outros testes.
+    monkeypatch.setattr(demonstracao.os, "environ", {"LEITOR_DADOS_DIR": str(tmp_path / "dados")})
+    assert demonstracao._ambiente().name == "dados_demo"
+    real = tmp_path / "dados"
+    real.mkdir()
+    (real / "boletos.db").write_bytes(b"dados reais")
+    with pytest.raises(ValueError):
+        demonstracao.preparar(real, refazer=True)
+    assert (real / "boletos.db").read_bytes() == b"dados reais"

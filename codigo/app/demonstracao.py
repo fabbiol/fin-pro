@@ -26,7 +26,8 @@ PORTA_PADRAO = "8010"
 def _ambiente() -> Path:
     """Variáveis de ambiente da demonstração (antes de importar o resto do sistema)."""
     raiz = Path(__file__).resolve().parent.parent
-    pasta = Path(os.environ.get("LEITOR_DADOS_DIR") or raiz / "dados_demo")
+    # Sempre a pasta própria: no servidor LEITOR_DADOS_DIR aponta os dados reais, que o --refazer apagaria.
+    pasta = raiz / "dados_demo"
     os.environ["LEITOR_DADOS_DIR"] = str(pasta)
     os.environ["LEITOR_DEMO"] = "1"
     os.environ.setdefault("LEITOR_PORT", PORTA_PADRAO)
@@ -415,6 +416,8 @@ def configurar(hoje: date | None = None) -> None:
 def preparar(pasta: Path, refazer: bool = False) -> dict | None:
     """Monta os dados de exemplo se ainda não existirem (ou de novo, com ``refazer``)."""
     if refazer and pasta.exists():
+        if pasta.name != "dados_demo":
+            raise ValueError(f"Recusado: {pasta} não é a pasta da demonstração (dados_demo); nada foi apagado.")
         shutil.rmtree(pasta)
     pasta.mkdir(parents=True, exist_ok=True)
     if (pasta / "boletos.db").exists():

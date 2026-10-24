@@ -331,3 +331,29 @@ def test_api_do_caixa_e_gastos_em_dinheiro():
         assert cliente.post(f"/api/caixa/{id_}/cancelar").json()["status"] == "Cancelado"
         assert cliente.get("/api/caixa?periodo=semana&data=2026-09-22").json()["saidas"]["total"] == 0
         assert cliente.get(f"/api/caixa/{id_}/historico").json()["eventos"][0]["acao"] == "Cancelamento"
+
+
+def test_dois_cliques_em_lancar_lancam_uma_vez_so(bot, monkeypatch):
+    import threading
+
+    _receber(bot, _foto(), _texto("gasolina"), _clique("cc:1"))
+    item = bot.listar()[0]
+    gravando, liberar = threading.Event(), threading.Event()
+    lancar = servico.lancar
+
+    def lancar_devagar(*args, **kwargs):
+        gravando.set()
+        liberar.wait(5)
+        return lancar(*args, **kwargs)
+
+    monkeypatch.setattr(servico, "lancar", lancar_devagar)
+    primeiro = threading.Thread(target=bot.confirmar, args=(item["id"], {}, "Fábio"))
+    primeiro.start()
+    assert gravando.wait(5)
+    with pytest.raises(servico.ErroCaixa):  # o segundo clique chega enquanto o primeiro grava
+        bot.confirmar(item["id"], {}, "Fábio")
+    liberar.set()
+    primeiro.join(5)
+    with pytest.raises(servico.ErroCaixa):  # e depois de lançado também não lança de novo
+        bot.confirmar(item["id"], {}, "Fábio")
+    assert len(contexto.repositorio_caixa.listar()) == 1

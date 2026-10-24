@@ -27,7 +27,9 @@ export async function carregarPrecos() {
 const precoDaTabela = (combustivel) => (tela.precos || []).find((p) => p.combustivel === combustivel)?.preco || null;
 const maquinaPorNome = (nome) => tela.maquinas.find((m) => m.nome === nome);
 const limpar = (dados) => Object.fromEntries(Object.entries(dados).filter(([, v]) => v !== "" && v !== null && v !== undefined));
-const numeroOuVazio = (texto) => (String(texto ?? "").trim() ? parseValor(texto) : "");
+// Preço por litro tem 3 casas: "7.450" é sete reais e quarenta e cinco, não milhar.
+const SEM_MILHAR = { milhar: false };
+const numeroOuVazio = (texto, opcoes) => (String(texto ?? "").trim() ? parseValor(texto, opcoes) : "");
 
 function opcoesMaquina(atual = "", combustivel = "") {
   const ativas = tela.maquinas.filter((m) => m.status !== "Inativa" || m.nome === atual);
@@ -151,7 +153,7 @@ export async function formularioCanhoto(dados = {}, enviar = null) {
     const campo = e.target.dataset.campo;
     if (!tr || !["litros", "preco_litro"].includes(campo)) { somar(); return; }
     const qtd = parseValor(tr.querySelector('[data-campo="litros"]').value);
-    const preco = parseValor(tr.querySelector('[data-campo="preco_litro"]').value);
+    const preco = parseValor(tr.querySelector('[data-campo="preco_litro"]').value, SEM_MILHAR);
     if (qtd && preco) tr.querySelector('[data-campo="valor"]').value = numeroBR(Math.round(qtd * preco * 100) / 100);
     somar();
   });
@@ -252,7 +254,7 @@ export async function formularioCompra(registro = null, enviar = null) {
   const formulario = el.querySelector("[data-form-compra]");
   const recalcular = () => {
     const qtd = parseValor(el.querySelector("#c-litros").value);
-    const preco = parseValor(el.querySelector("#c-preco").value);
+    const preco = parseValor(el.querySelector("#c-preco").value, SEM_MILHAR);
     if (qtd && preco) el.querySelector("#c-valor").value = numeroBR(Math.round(qtd * preco * 100) / 100);
   };
   el.querySelector("#c-litros").addEventListener("input", recalcular);
@@ -265,7 +267,7 @@ export async function formularioCompra(registro = null, enviar = null) {
     evento?.preventDefault();
     const dados = Object.fromEntries(new FormData(formulario));
     const corpo = limpar({ ...dados, litros: parseValor(dados.litros), valor: numeroOuVazio(dados.valor),
-                           preco_litro: numeroOuVazio(dados.preco_litro) });
+                           preco_litro: numeroOuVazio(dados.preco_litro, SEM_MILHAR) });
     if (!corpo.litros) { toast("Informe os litros.", "aviso"); return; }
     try {
       const anexo = arquivoId || await arquivoEscolhido(el);
@@ -317,7 +319,7 @@ export async function formularioAbastecimento(registro) {
   });
   const recalcular = () => {
     const qtd = parseValor(el.querySelector("#a-litros").value);
-    const preco = parseValor(el.querySelector("#a-preco").value);
+    const preco = parseValor(el.querySelector("#a-preco").value, SEM_MILHAR);
     if (qtd && preco) el.querySelector("#a-valor").value = numeroBR(Math.round(qtd * preco * 100) / 100);
   };
   el.querySelector("#a-litros").addEventListener("input", recalcular);
@@ -329,7 +331,7 @@ export async function formularioAbastecimento(registro) {
   });
   el.querySelector("[data-salvar]").addEventListener("click", async () => {
     const dados = Object.fromEntries(new FormData(el.querySelector("[data-form-abastecimento]")));
-    const corpo = { ...dados, litros: parseValor(dados.litros), preco_litro: numeroOuVazio(dados.preco_litro) || null,
+    const corpo = { ...dados, litros: parseValor(dados.litros), preco_litro: numeroOuVazio(dados.preco_litro, SEM_MILHAR) || null,
                     valor: numeroOuVazio(dados.valor) || null, medidor: numeroOuVazio(dados.medidor) || null };
     if (!corpo.litros) { toast("Informe os litros.", "aviso"); return; }
     if (!corpo.maquina || corpo.maquina === NOVA) { toast("Escolha a máquina.", "aviso"); return; }
@@ -413,7 +415,7 @@ export async function formularioPrecos() {
   });
   el.querySelector("[data-salvar]").addEventListener("click", async () => {
     const dados = Object.fromEntries(new FormData(el.querySelector("[data-form-precos]")));
-    const precos = Object.fromEntries(Object.entries(dados).map(([c, v]) => [c, String(v).trim() ? parseValor(v) : 0]));
+    const precos = Object.fromEntries(Object.entries(dados).map(([c, v]) => [c, String(v).trim() ? parseValor(v, SEM_MILHAR) : 0]));
     if (Object.values(precos).some((v) => Number.isNaN(v))) { toast("Algum preço está inválido.", "aviso"); return; }
     try {
       await api.post("/api/diesel/precos", { precos });
