@@ -1,7 +1,7 @@
 """Nome do beneficiário pelo CPF/CNPJ: histórico da planilha e consenso dentro do arquivo."""
 
+from app.banco import BancoBoletos
 from app.boleto.extrator import harmonizar_beneficiarios
-from app.planilha import PlanilhaBoletos
 
 CNPJ = "02.359.273/0001-52"
 
@@ -36,7 +36,7 @@ def test_consenso_no_mesmo_arquivo_corrige_leitura_ruim():
 
 
 def test_historico_da_planilha_prevalece_e_preenche_ausente(tmp_path):
-    planilha = PlanilhaBoletos(tmp_path / "b.xlsx")
+    planilha = BancoBoletos(tmp_path / "b.db", tmp_path / "b.xlsx")
     planilha.adicionar({"beneficiario": "Hiper JN Materiais para Construção", "documento_beneficiario": CNPJ})
     boletos = [_boleto("NIPER 3N-COMERCIO LTDA"), _boleto(None)]
     harmonizar_beneficiarios(boletos, planilha)

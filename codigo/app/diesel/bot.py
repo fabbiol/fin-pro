@@ -284,14 +284,16 @@ class BotDiesel:
 
     # ------------------------------------------------------------------ Telegram: envio
 
-    def _enviar(self, chat_id: str, texto: str, botoes: list[list[dict]] | None = None) -> None:
+    def _enviar(self, chat_id: str, texto: str, botoes: list[list[dict]] | None = None) -> bool:
         dados = {"chat_id": chat_id, "text": texto, "parse_mode": "HTML", "disable_web_page_preview": True}
         if botoes:
             dados["reply_markup"] = {"inline_keyboard": botoes}
         try:
             canais._telegram(self.token(), "sendMessage", dados)
+            return True
         except canais.ErroCanal as exc:
             log.warning("Bot do diesel: não foi possível enviar para %s: %s", chat_id, exc)
+            return False
 
     def _enviar_arquivo(self, chat_id: str, item: dict, legenda: str, botoes: list[list[dict]]) -> None:
         """Manda a foto do canhoto (ou o PDF) de volta, com a pergunta; sem o arquivo, só a mensagem."""
@@ -844,8 +846,9 @@ class BotDiesel:
         enviados = []
         for tipo, referencia in self.relatorios_devidos(agora):
             texto = relatorio.texto(tipo, referencia, self.nivel_relatorio(), self.alerta_valor())
-            for chat_id in destinos:
-                self._enviar(chat_id, texto)
+            # Sem nenhum envio aceito pelo Telegram, fica como devido e o agendador tenta de novo.
+            if not any([self._enviar(chat_id, texto) for chat_id in destinos]):
+                continue
             with self._lock:
                 self._estado["config"].setdefault("enviados", {})[tipo] = servico.periodo(tipo, referencia)[0].isoformat()
                 self._gravar()

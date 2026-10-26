@@ -11,13 +11,12 @@ from app.banco import BancoBoletos
 from app.empresas.configuracao import ConfigEmpresas
 from app.empresas.modelos import ABAS_EMPRESAS
 from app.fila_gravacao import FilaGravacao
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 
 
 @pytest.fixture
 def sistema(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx", tmp_path / "backups")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx", tmp_path / "backups")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     gerenciador = usuarios.GerenciadorUsuarios(tmp_path / "usuarios.json")
     empresas = BancoBoletos(tmp_path / "empresas.db", tmp_path / "fechamentos.xlsx", tmp_path / "backups",

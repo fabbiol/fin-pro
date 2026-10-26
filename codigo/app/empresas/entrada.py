@@ -125,7 +125,7 @@ class CaixaNotas:
         """Lê o arquivo, decide o que fazer e devolve o item (None se o arquivo já tinha chegado antes)."""
         impressao = hashlib.sha256(dados).hexdigest()
         with self._lock:
-            if any(i.get("hash") == impressao for i in self._itens):
+            if any(i.get("hash") == impressao and i["estado"] != "descartado" for i in self._itens):
                 return None
         item = {"id": uuid.uuid4().hex[:12], "origem": origem, "remetente": (remetente or "")[:120],
                 "legenda": (legenda or "")[:300], "recebido_em": _agora(), "hash": impressao,
@@ -417,39 +417,47 @@ class CaixaNotas:
             raise ValueError(str(exc)) from exc
         recebidos = 0
         for atualizacao in atualizacoes:
-            self.config.registrar_bot(offset=int(atualizacao.get("update_id", 0)) + 1)
-            conteudo = atualizacao.get("message") or atualizacao.get("channel_post") or {}
-            chat = conteudo.get("chat") or {}
-            if not chat:
-                continue
-            self.config.lembrar_chat(chat)
-            chat_id = str(chat.get("id"))
-            arquivo = self._arquivo_da_mensagem(conteudo)
-            if not arquivo:
-                self._responder_comando(token, chat_id, conteudo, cadastrados)
-                continue
-            if chat_id not in cadastrados:
-                self._responder(token, chat_id, "Este bot só recebe notas fiscais de quem está cadastrado. "
-                                                "Peça ao responsável para incluir você em Empresas → Bot de notas.")
-                continue
-            file_id, nome, tamanho = arquivo
-            if tamanho and tamanho > TAMANHO_MAXIMO:
-                self._responder(token, chat_id, "Arquivo grande demais (máximo 20 MB).")
-                continue
+            # A posição só avança depois de tratar: se o sistema cair no meio, a mensagem é lida de novo
+            # (o arquivo repetido é reconhecido em receber). Uma mensagem com erro não trava as outras.
             try:
-                dados = canais.baixar_arquivo_telegram(token, file_id)
-            except canais.ErroCanal as exc:
-                self._responder(token, chat_id, f"Não consegui baixar o arquivo: {exc}")
-                continue
-            de = (conteudo.get("from") or {})
-            remetente = " ".join(p for p in (de.get("first_name"), de.get("last_name")) if p)
-            quem = cadastrados.get(chat_id) or remetente or chat_id
-            item = self.receber(dados, nome, "telegram", remetente or chat_id, conteudo.get("caption") or "",
-                                f"{quem} (Bot de notas)")
-            self._responder(token, chat_id, self.mensagem_resposta(item))
-            recebidos += 1 if item else 0
+                recebidos += self._tratar_mensagem(token, atualizacao, cadastrados)
+            except Exception:
+                log.exception("Bot de notas: falha ao tratar uma mensagem")
+            self.config.registrar_bot(offset=int(atualizacao.get("update_id", 0)) + 1)
         self.config.registrar_bot(ultima_verificacao=_agora(), ultimo_erro=None)
         return {"recebidos": recebidos}
+
+    def _tratar_mensagem(self, token: str, atualizacao: dict, cadastrados: dict) -> int:
+        conteudo = atualizacao.get("message") or atualizacao.get("channel_post") or {}
+        chat = conteudo.get("chat") or {}
+        if not chat:
+            return 0
+        self.config.lembrar_chat(chat)
+        chat_id = str(chat.get("id"))
+        arquivo = self._arquivo_da_mensagem(conteudo)
+        if not arquivo:
+            self._responder_comando(token, chat_id, conteudo, cadastrados)
+            return 0
+        if chat_id not in cadastrados:
+            self._responder(token, chat_id, "Este bot só recebe notas fiscais de quem está cadastrado. "
+                                            "Peça ao responsável para incluir você em Empresas → Bot de notas.")
+            return 0
+        file_id, nome, tamanho = arquivo
+        if tamanho and tamanho > TAMANHO_MAXIMO:
+            self._responder(token, chat_id, "Arquivo grande demais (máximo 20 MB).")
+            return 0
+        try:
+            dados = canais.baixar_arquivo_telegram(token, file_id)
+        except canais.ErroCanal as exc:
+            self._responder(token, chat_id, f"Não consegui baixar o arquivo: {exc}")
+            return 0
+        de = (conteudo.get("from") or {})
+        remetente = " ".join(p for p in (de.get("first_name"), de.get("last_name")) if p)
+        quem = cadastrados.get(chat_id) or remetente or chat_id
+        item = self.receber(dados, nome, "telegram", remetente or chat_id, conteudo.get("caption") or "",
+                            f"{quem} (Bot de notas)")
+        self._responder(token, chat_id, self.mensagem_resposta(item))
+        return 1 if item else 0
 
     def _responder_comando(self, token: str, chat_id: str, mensagem: dict, cadastrados: dict) -> None:
         texto = (mensagem.get("text") or "").strip()
@@ -504,7 +512,8 @@ class CaixaNotas:
                 enviados += 1
             except canais.ErroCanal as exc:
                 log.warning("Bot de notas: falha ao enviar o fechamento para %s: %s", destinatario["chat_id"], exc)
-        self.config.registrar_envio(competencia)
+        if enviados:  # sem nenhum envio, o agendador tenta de novo
+            self.config.registrar_envio(competencia)
         return {"enviados": enviados, "empresas": len(mensagens), "competencia": competencia}
 
     # ------------------------------------------------------------------ agendador

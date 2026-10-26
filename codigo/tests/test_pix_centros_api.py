@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
 from app import contexto, janela, main
+from app.banco import BancoBoletos
 from app.fila_gravacao import FilaGravacao
 from app.pix import gerar_copia_e_cola
 from app.planilha import PlanilhaBoletos
@@ -19,7 +20,7 @@ from gerar_boleto_exemplo import montar_codigo
 
 @pytest.fixture
 def cliente(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx", tmp_path / "backups")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx", tmp_path / "backups")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     monkeypatch.setattr(contexto, "planilha", planilha)
     monkeypatch.setattr(contexto, "fila", fila)
@@ -54,6 +55,7 @@ def test_lanca_edita_e_lista_pix(cliente):
     assert cliente.get(f"/api/pix/{pix['id']}/qrcode.svg").headers["content-type"].startswith("image/svg")
     assert cliente.get("/api/pix/exportar", params={"formato": "xlsx"}).status_code == 200
 
+    assert contexto.planilha.exportar()  # o Excel é gerado a partir do banco
     wb = load_workbook(contexto.planilha.caminho)
     assert wb["Pix"]["C2"].value == "João Serviços" and wb["Pix"]["D2"].value == "E-mail"
     assert any(l[1] == "Lançamento (Pix)" for l in wb["Histórico"].iter_rows(values_only=True))
@@ -120,7 +122,7 @@ def test_analise_por_mes_agrupa_centros_menores():
 
 
 def test_notificacoes_incluem_pix(tmp_path):
-    planilha = PlanilhaBoletos(tmp_path / "b.xlsx")
+    planilha = BancoBoletos(tmp_path / "b.db", tmp_path / "b.xlsx")
     fila = FilaGravacao(planilha, tmp_path / "f.json")
     pix = RepositorioBoletos(planilha, fila, "pix")
     pix.adicionar({"recebedor": "Maria", "tipo_chave": "celular", "chave": "+5565996035105", "valor": 90.0,

@@ -9,8 +9,8 @@ from openpyxl import load_workbook
 
 from app import contexto, fechamento, main
 from app.arquivos import RepositorioArquivos
+from app.banco import BancoBoletos
 from app.fila_gravacao import FilaGravacao
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 
 SETEMBRO = date(2026, 9, 1)
@@ -77,7 +77,7 @@ def test_zip_para_o_contador_com_comprovantes(tmp_path):
 
 
 def test_api_do_fechamento(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     monkeypatch.setattr(contexto, "repositorio", RepositorioBoletos(planilha, fila))
     monkeypatch.setattr(contexto, "repositorio_pix", RepositorioBoletos(planilha, fila, "pix"))

@@ -212,19 +212,22 @@ class GerenciadorUsuarios:
             usuario = self._obter(id_)
             if (ativo is False or (perfil and perfil != "administrador")) and self._ultimo_administrador(usuario):
                 raise ErroUsuario("Este é o único administrador. Deixe outra pessoa como administrador antes de mudar este.")
-            if perfil is not None:
-                if perfil not in PERFIS:
-                    raise ErroUsuario("Perfil inválido.")
-                usuario["perfil"] = perfil
-            if permissoes is not None:
-                usuario["permissoes"] = normalizar_permissoes(permissoes)
+            # Confere tudo antes de mudar qualquer coisa: uma edição recusada não muda nada.
+            if perfil is not None and perfil not in PERFIS:
+                raise ErroUsuario("Perfil inválido.")
             if nome is not None:
                 nome = re.sub(r"\s+", " ", nome).strip()
                 if not nome or len(nome) > 60:
                     raise ErroUsuario("Informe o nome da pessoa (até 60 caracteres).")
-                usuario["nome"] = nome
             if senha:
                 self._validar_senha(senha)
+            if perfil is not None:
+                usuario["perfil"] = perfil
+            if permissoes is not None:
+                usuario["permissoes"] = normalizar_permissoes(permissoes)
+            if nome is not None:
+                usuario["nome"] = nome
+            if senha:
                 self._definir_senha(usuario, senha)
                 self._encerrar_sessoes(id_)
             if ativo is not None:

@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 
 from app import admin, contexto, entrada, main
 from app.arquivos import RepositorioArquivos
+from app.banco import BancoBoletos
 from app.fila_gravacao import FilaGravacao
 from app.notificacoes import canais
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 
 PDF = b"%PDF-1.4 boleto de teste " + b"x" * 200
@@ -171,7 +171,7 @@ def test_telegram_recebe_so_de_pessoas_cadastradas_e_responde(tmp_path, monkeypa
 
 @pytest.fixture
 def cliente(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     arquivos = RepositorioArquivos(tmp_path / "arquivos")
     monkeypatch.setattr(contexto, "planilha", planilha)

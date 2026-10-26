@@ -343,8 +343,8 @@ class PlanilhaBoletos:
             return f"'{definicao.nome}'!{letra}:{letra}"
 
         b, p = ABAS["boletos"], ABAS["pix"]
-        valor, status, venc, ident = (faixa(b, k) for k in ("valor", "status", "vencimento", "id"))
-        pvalor, pstatus, pvenc, pident = (faixa(p, k) for k in ("valor", "status", "vencimento", "id"))
+        valor, status, venc, ident, pago = (faixa(b, k) for k in ("valor", "status", "vencimento", "id", "valor_pago"))
+        pvalor, pstatus, pvenc, pident, ppago = (faixa(p, k) for k in ("valor", "status", "vencimento", "id", "valor_pago"))
         moeda = '"R$" #,##0.00'
         linhas = [
             ("Resumo dos boletos", None, None),
@@ -354,13 +354,14 @@ class PlanilhaBoletos:
             ("Vencidos e não pagos (quantidade)", f'=COUNTIFS({status},"Pendente",{venc},"<"&TODAY())', "0"),
             ("Vencidos e não pagos (valor)", f'=SUMIFS({valor},{status},"Pendente",{venc},"<"&TODAY())', moeda),
             ("Vencem nos próximos 7 dias (valor)",
-             f'=SUMIFS({valor},{status},"Pendente",{venc},">="&TODAY(),{venc},"<="&TODAY()+7)', moeda),
-            ("Pagos (valor)", f'=SUMIFS({valor},{status},"Pago")', moeda),
+             f'=SUMIFS({valor},{status},"Pendente",{venc},">="&TODAY(),{venc},"<="&TODAY()+6)', moeda),
+            # Pago: o que saiu de fato (valor pago; sem ele, o valor do lançamento), como no Painel.
+            ("Pagos (valor)", f'=SUMIFS({pago},{status},"Pago")+SUMIFS({valor},{status},"Pago",{pago},"")', moeda),
             ("Resumo dos Pix", None, None),
             ("Pix lançados", f"=COUNT({pident})", "0"),
             ("Pix pendentes (valor)", f'=SUMIFS({pvalor},{pstatus},"Pendente")', moeda),
             ("Pix atrasados (valor)", f'=SUMIFS({pvalor},{pstatus},"Pendente",{pvenc},"<"&TODAY())', moeda),
-            ("Pix pagos (valor)", f'=SUMIFS({pvalor},{pstatus},"Pago")', moeda),
+            ("Pix pagos (valor)", f'=SUMIFS({ppago},{pstatus},"Pago")+SUMIFS({pvalor},{pstatus},"Pago",{ppago},"")', moeda),
         ]
         for i, (titulo, formula, formato) in enumerate(linhas, start=1):
             a = ws.cell(row=i, column=1, value=titulo)

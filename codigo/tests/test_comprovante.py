@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 
 from app import comprovante, contexto, entrada, main
 from app.arquivos import RepositorioArquivos
+from app.banco import BancoBoletos
 from app.boleto.codigo import formatar_linha
 from app.fila_gravacao import FilaGravacao
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 
 ITAU = """Banco Itaú - Comprovante de pagamento de boleto
@@ -109,7 +109,7 @@ def _pdf(texto: str) -> bytes:
 
 @pytest.fixture
 def sistema(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     arquivos = RepositorioArquivos(tmp_path / "arquivos")
     monkeypatch.setattr(contexto, "planilha", planilha)
@@ -154,6 +154,8 @@ def test_comprovante_enviado_na_tela_registra_o_pagamento(sistema, boleto_pdf):
     assert (r["status"], r["data_pagamento"], r["valor_pago"], r["juros_multa"]) == ("Pago", pagamento.isoformat(), float(VALOR) + 12, 12.0)
     assert r["comprovante_nome"] == "comprovante.pdf" and registrado["pagamento"]["dias_atraso"] == 3
     assert cliente.get(f"/api/boletos/{boleto['id']}/historico").json()["eventos"][0]["acao"] == "Pagamento"
+    de_novo = cliente.post("/api/leituras", files={"arquivo": ("outro.pdf", _pdf(texto + "\n2a via"), "application/pdf")}).json()
+    assert de_novo["comprovante"]["sugerido"] is None  # o boleto já tem comprovante: não paga de novo sozinho
 
     fechamento = cliente.get("/api/relatorios/fechamento", params={"mes": f"{VENCIMENTO:%Y-%m}"}).json()["totais"]
     assert (fechamento["pago"], fechamento["juros_multa"], fechamento["pagos_com_atraso"]) == (float(VALOR) + 12, 12.0, 1)
