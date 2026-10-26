@@ -8,6 +8,7 @@ import pytest
 from app import contexto
 from app.empresas import bot, servico
 from app.empresas.entrada import CaixaNotas
+from app.notificacoes import canais
 from test_empresas_leitura import CHEQUE, CHEQUE_FOTO, COMPROVANTE_PIX, PRINT_FECHAMENTO, XML_NFE
 
 
@@ -173,6 +174,12 @@ def test_arquivo_desconhecido_vira_erro_com_explicacao(caixa):
     assert item["estado"] == "erro" and "não reconheci" in caixa.mensagem_resposta(item).lower()
 
 
+def test_arquivo_descartado_pode_ser_mandado_de_novo(caixa):
+    arquivo = _pdf("Lista de compras\nPão, leite e café")
+    assert caixa.descartar(caixa.receber(arquivo, "lista.pdf")["id"])
+    assert caixa.receber(arquivo, "lista.pdf") is not None
+
+
 # --------------------------------------------------------------------------- conferência na tela
 
 
@@ -271,3 +278,40 @@ def test_envio_automatico_do_fechamento_no_dia_20(caixa, imapal, monkeypatch):
 
     assert caixa.enviar_fechamentos(date(2026, 8, 20))["enviados"] == 0  # não manda duas vezes
     assert caixa.enviar_fechamentos(date(2026, 8, 20), forcar=True)["enviados"] == 1
+
+
+def test_fechamento_que_o_telegram_recusou_sai_na_proxima_vez(caixa, imapal, monkeypatch):
+    def recusar(token, chat, texto):
+        raise canais.ErroCanal("fora do ar")
+    monkeypatch.setattr("app.notificacoes.canais.enviar_telegram", recusar)
+    contexto.empresas_config.atualizar({"bot": {"token": "123:abc", "ativo": True,
+                                                "destinatarios": [{"chat_id": "555", "nome": "Fábio"}]}})
+    servico.lancar_notas("Imapal", [{"data": date(2026, 8, 3), "material": "Brita 01", "unidade": "M³",
+                                     "quantidade": 12, "valor_unitario": 158.80, "numero_nf": "6859", "pedido": "7043"}],
+                         "Fábio")
+    assert caixa.enviar_fechamentos(date(2026, 8, 20))["enviados"] == 0
+    monkeypatch.setattr("app.notificacoes.canais.enviar_telegram", lambda token, chat, texto: None)
+    assert caixa.enviar_fechamentos(date(2026, 8, 20))["enviados"] == 1
+
+
+def test_bot_de_notas_nao_perde_arquivo_se_o_sistema_cair_no_meio(caixa, monkeypatch):
+    contexto.empresas_config.atualizar({"bot": {"token": "123:abc", "ativo": True,
+                                                "destinatarios": [{"chat_id": "42", "nome": "Maria"}]}})
+    atualizacoes = [{"update_id": n, "message": {"chat": {"id": 42, "type": "private"},
+                                                 "document": {"file_id": f"d{n}", "file_name": f"nota{n}.xml"}}} for n in (1, 2)]
+    monkeypatch.setattr(canais, "_telegram", lambda token, metodo, dados=None: atualizacoes if metodo == "getUpdates" else {})
+
+    def cair(token, file_id):
+        raise SystemExit("reiniciou")
+    monkeypatch.setattr(canais, "baixar_arquivo_telegram", cair)
+    with pytest.raises(SystemExit):
+        caixa.verificar()
+    assert not contexto.empresas_config.bot().get("offset")  # a mensagem 1 é lida de novo
+
+    def baixar(token, file_id):
+        if file_id == "d1":
+            raise RuntimeError("arquivo estranho")
+        return XML_NFE.encode()
+    monkeypatch.setattr(canais, "baixar_arquivo_telegram", baixar)
+    caixa.verificar()  # o erro na 1 não impede a 2
+    assert contexto.empresas_config.bot()["offset"] == 3 and len(caixa.listar(incluir_concluidos=True)) == 1

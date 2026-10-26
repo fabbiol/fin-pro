@@ -268,6 +268,21 @@ def test_digitar_o_nome_do_centro_tambem_funciona(bot):
     assert "Cozinha" in bot.lista_centros and bot.contagem() == 2
 
 
+def test_botao_de_uma_conversa_antiga_nao_responde_pela_atual(bot):
+    _receber(bot, _foto(), _texto("gasolina"))
+    antigo = next(b["callback_data"] for b in bot.telegram.botoes() if b["text"] == "Obras")
+    _receber(bot, _foto(arquivo="f2"), _texto("lanche"))  # mandou outro cupom antes de escolher o centro do primeiro
+    _receber(bot, _clique(antigo))  # tocou no botão da pergunta do primeiro
+    assert {i["dados"]["descricao"]: i["dados"]["centro_custo"] for i in bot.listar()} == {"gasolina": "", "lanche": ""}
+
+
+def test_comprovante_descartado_pode_ser_mandado_de_novo(bot):
+    _receber(bot, _foto(), _texto("gasolina"), _clique("cc:1"))
+    assert bot.descartar(bot.listar()[0]["id"])
+    _receber(bot, _foto())
+    assert "Onde foi gasto?" in bot.telegram.ultima()["text"]  # recebeu de novo e começou a conversa
+
+
 def test_pergunta_o_valor_quando_nao_consegue_ler(bot):
     bot.ler = lambda dados, nome: {"valor": None, "local": ""}
     _receber(bot, _foto())

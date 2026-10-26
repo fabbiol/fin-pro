@@ -66,6 +66,14 @@ def _valor(registro: dict) -> float:
     return float(registro.get("valor") or 0)
 
 
+def _pago(registro: dict) -> float:
+    """Quanto saiu de fato: o valor pago (com juros ou desconto) ou, sem ele, o valor do lançamento."""
+    try:
+        return float(registro.get("valor_pago") or 0) or _valor(registro)
+    except (TypeError, ValueError):
+        return _valor(registro)
+
+
 def _juros(registro: dict) -> float:
     try:
         return round(float(registro.get("juros_multa") or 0), 2)
@@ -152,10 +160,10 @@ def resumir(registros: list[dict], hoje: date | None = None) -> dict:
     resumo = {"quantidade": len(registros), "valor_total": 0.0, "valor_pendente": 0.0, "valor_pago": 0.0, "valor_vencido": 0.0,
               "juros_multa": 0.0, "pagos_com_juros": 0}
     for r in registros:
-        v = _valor(r)
         sit = situacao(r, hoje)
         if sit == "cancelado":
             continue
+        v = _pago(r) if sit == "pago" else _valor(r)
         resumo["valor_total"] += v
         if sit == "pago":
             resumo["valor_pago"] += v
@@ -181,7 +189,7 @@ def painel(registros: list[dict], hoje: date | None = None, pix: list[dict] | No
     registros = [*({**r, "tipo_pagamento": "boleto"} for r in registros),
                  *({**p, "tipo_pagamento": "pix", "beneficiario": p.get("recebedor") or p.get("beneficiario") or ""} for p in pix or [])]
     inicio_mes = _inicio_mes(hoje)
-    fim_semana = hoje + timedelta(days=7)
+    fim_semana = hoje + timedelta(days=6)  # 7 dias contando hoje, como na Projeção
 
     k = defaultdict(float)
     for r in registros:
@@ -199,7 +207,7 @@ def painel(registros: list[dict], hoje: date | None = None, pix: list[dict] | No
         if sit == "pago":
             if isinstance(pago_em, date) and pago_em >= inicio_mes:
                 k["pagos_mes_qtd"] += 1
-                k["pagos_mes_valor"] += v
+                k["pagos_mes_valor"] += _pago(r)
                 if _juros(r):
                     k["juros_mes_qtd"] += 1
                     k["juros_mes_valor"] += _juros(r)
@@ -227,7 +235,7 @@ def painel(registros: list[dict], hoje: date | None = None, pix: list[dict] | No
         if sit == "cancelado":
             continue
         chave = "pago" if sit == "pago" else "vencido" if sit == "vencido" else "a_vencer"
-        serie[mes][chave] += _valor(r)
+        serie[mes][chave] += _pago(r) if chave == "pago" else _valor(r)
 
     beneficiarios: dict[str, dict] = {}
     for r in registros:
@@ -302,6 +310,9 @@ def analise_gastos(
     if tipo in ("todos", "dinheiro"):
         itens += [("dinheiro", r) for r in caixa or []]
 
+    def gasto(r: dict) -> float:  # pago: o que saiu de fato; pendente: o valor do lançamento
+        return _pago(r) if situacao(r, hoje) == "pago" else _valor(r)
+
     selecionados = []
     for origem, r in itens:
         sit = situacao(r, hoje)
@@ -329,7 +340,7 @@ def analise_gastos(
         nome = nome_centro(r)
         item = por_centro.setdefault(nome.lower(), {"centro": nome, "total": 0.0, "boletos": 0.0, "pix": 0.0,
                                                     "dinheiro": 0.0, "quantidade": 0, "pagos": 0.0, "pendentes": 0.0})
-        v = _valor(r)
+        v = gasto(r)
         item["total"] += v
         item[{"boleto": "boletos", "pix": "pix"}.get(origem, "dinheiro")] += v
         item["quantidade"] += 1
@@ -346,7 +357,7 @@ def analise_gastos(
     meses: dict[date, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for _, r, data_ref in selecionados:
         if isinstance(data_ref, date):
-            meses[date(data_ref.year, data_ref.month, 1)][nome_centro(r)] += _valor(r)
+            meses[date(data_ref.year, data_ref.month, 1)][nome_centro(r)] += gasto(r)
     serie_mensal = []
     for mes in sorted(meses):
         valores = meses[mes]
@@ -366,16 +377,16 @@ def analise_gastos(
     for origem, r, _ in selecionados:
         nome = (r.get("recebedor") if origem == "pix" else r.get("beneficiario")) or "Não informado"
         item = por_nome.setdefault(normalizar(nome).strip(), {"nome": nome, "total": 0.0, "quantidade": 0})
-        item["total"] += _valor(r)
+        item["total"] += gasto(r)
         item["quantidade"] += 1
     maiores = sorted(({**i, "total": round(i["total"], 2)} for i in por_nome.values()), key=lambda i: i["total"], reverse=True)[:10]
 
     return {
         "total": round(total, 2),
         "quantidade": len(selecionados),
-        "total_boletos": round(sum(_valor(r) for o, r, _ in selecionados if o == "boleto"), 2),
-        "total_pix": round(sum(_valor(r) for o, r, _ in selecionados if o == "pix"), 2),
-        "total_dinheiro": round(sum(_valor(r) for o, r, _ in selecionados if o == "dinheiro"), 2),
+        "total_boletos": round(sum(gasto(r) for o, r, _ in selecionados if o == "boleto"), 2),
+        "total_pix": round(sum(gasto(r) for o, r, _ in selecionados if o == "pix"), 2),
+        "total_dinheiro": round(sum(gasto(r) for o, r, _ in selecionados if o == "dinheiro"), 2),
         "juros_multa": round(sum(_juros(r) for o, r, _ in selecionados if situacao(r, hoje) == "pago"), 2),
         "pagos_com_juros": sum(1 for o, r, _ in selecionados if situacao(r, hoje) == "pago" and _juros(r)),
         "sem_centro": round(por_centro.get(SEM_CENTRO.lower(), {}).get("total", 0.0), 2),

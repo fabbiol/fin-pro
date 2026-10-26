@@ -3,7 +3,7 @@
 import { api } from "../api.js";
 import { icone } from "../icons.js";
 import { abrirModal, brl, confirmar, dataBR, dataHoraBR, debounce, esc, mensagemErro, numeroBR, parseValor, toast } from "../ui.js";
-import { digitos, mascarar } from "./pix/chaves.js";
+import { mascarar } from "./pix/chaves.js";
 
 const FORMAS = { pix: "Pix", transferencia: "TED/DOC" };
 const AGUARDANDO = "Aguardando pagamento";
@@ -15,7 +15,12 @@ let linhasAtuais = [];
 let raiz = null;
 let requisicao = 0;
 
-const documentoBR = (d) => (d ? mascarar("cpf_cnpj", d) : "");
+// CNPJ pode ter letras desde jul/2026 (12.ABC.345/01DE-35): limpa sem perder as letras.
+const documentoLimpo = (d) => String(d || "").toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 14);
+const documentoBR = (d) => {
+  const t = documentoLimpo(d);
+  return /[A-Z]/.test(t) ? t.replace(/^(\w{2})(\w{3})(\w{3})(\w{4})(\d{2})$/, "$1.$2.$3/$4-$5") : t ? mascarar("cpf_cnpj", t) : "";
+};
 const somaDe = (notas) => Math.round(notas.reduce((s, t) => s + Number(t.valor || 0), 0) * 100) / 100;
 
 export async function montar(el) {
@@ -219,7 +224,7 @@ function abrirLigar(notas) {
         <div class="campo"><label for="lp-pagador">Quem pagou</label>
           <input id="lp-pagador" class="input" name="pagador" maxlength="120"></div>
         <div class="campo"><label for="lp-doc">CNPJ/CPF de quem pagou</label>
-          <input id="lp-doc" class="input mono" name="documento_pagador" inputmode="numeric" maxlength="18"></div>
+          <input id="lp-doc" class="input mono" name="documento_pagador" maxlength="18" autocapitalize="characters"></div>
         <div class="campo col-2"><label for="lp-id">ID da transação</label>
           <input id="lp-id" class="input mono" name="id_transacao" maxlength="100"></div>
         <div class="campo col-2"><label for="lp-obs">Observação (opcional)</label>
@@ -325,7 +330,7 @@ function abrirLigar(notas) {
     e.target.classList.remove("baixa-confianca");
     if (e.target.name === "valor") desenharConta();
   });
-  campo("documento_pagador").addEventListener("blur", (e) => { e.target.value = documentoBR(digitos(e.target.value)); });
+  campo("documento_pagador").addEventListener("blur", (e) => { e.target.value = documentoBR(e.target.value); });
 
   const confirmarLigacao = async (e) => {
     e?.preventDefault();
@@ -338,7 +343,7 @@ function abrirLigar(notas) {
     try {
       await api.post(ROTA_PAGAMENTOS, {
         ids: notas.map((t) => t.id), arquivo: lido.arquivo, valor, data: dados.data, pagador: dados.pagador.trim(),
-        documento_pagador: digitos(dados.documento_pagador), id_transacao: dados.id_transacao.trim(), observacao: dados.observacao.trim(),
+        documento_pagador: documentoLimpo(dados.documento_pagador), id_transacao: dados.id_transacao.trim(), observacao: dados.observacao.trim(),
       });
       notas.forEach((t) => selecionadas.delete(t.id));
       fechar(true);

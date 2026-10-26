@@ -250,7 +250,7 @@ class BotCaixa:
         partes = [f"💵 <b>{_moeda(lido['valor'])}</b>" if lido.get("valor") else "💵 Valor lido",
                   f"{date.fromisoformat(str(lido['data'])[:10]):%d/%m/%Y}" if lido.get("data") else "",
                   escape(lido.get("local") or "")]
-        botoes = ([[{"text": f"✔ {lido['local'][:40]}", "callback_data": "onde:lido"}]] if lido.get("local") else None)
+        botoes = ([[{"text": f"✔ {lido['local'][:40]}", "callback_data": f"onde:lido@{item['id']}"}]] if lido.get("local") else None)
         self._enviar(chat_id, " · ".join(p for p in partes if p) + "\n\n<b>Onde foi gasto?</b>\n"
                      "Responda com uma frase (ex.: <i>gasolina da caminhonete</i>, <i>almoço da equipe da obra</i>).",
                      botoes)
@@ -260,13 +260,13 @@ class BotCaixa:
         conversa["centros"] = centros[:40]
         botoes, linha = [], []
         for indice, nome in enumerate(conversa["centros"]):
-            linha.append({"text": nome[:30], "callback_data": f"cc:{indice}"})
+            linha.append({"text": nome[:30], "callback_data": f"cc:{indice}@{conversa['item_id']}"})
             if len(linha) == 2:
                 botoes.append(linha)
                 linha = []
         if linha:
             botoes.append(linha)
-        botoes.append([{"text": "➕ Cadastrar um novo centro de custo", "callback_data": "cc:novo"}])
+        botoes.append([{"text": "➕ Cadastrar um novo centro de custo", "callback_data": f"cc:novo@{conversa['item_id']}"}])
         self._enviar(chat_id, "<b>Qual o centro de custo?</b>\nToque em uma opção (são os mesmos da aba Gastos).", botoes)
 
     def _finalizar(self, chat_id: str, item: dict) -> None:
@@ -280,7 +280,7 @@ class BotCaixa:
     def _nova_foto(self, chat_id: str, remetente: str, dados: bytes, nome_arquivo: str) -> None:
         impressao = hashlib.sha256(dados).hexdigest()
         with self._lock:
-            if any(i.get("hash") == impressao for i in self._estado["itens"]):
+            if any(i.get("hash") == impressao and i["estado"] != "descartado" for i in self._estado["itens"]):
                 self._enviar(chat_id, "Este comprovante já tinha sido enviado antes.")
                 return
             aberta = self._estado["conversas"].pop(chat_id, None)
@@ -351,8 +351,8 @@ class BotCaixa:
                 conversa.update(etapa="confirmar_novo", novo_nome=texto.strip()[:60])
                 self._gravar()
             self._enviar(chat_id, f"Não achei o centro de custo “{escape(texto.strip()[:60])}”.",
-                         [[{"text": f"➕ Cadastrar “{texto.strip()[:28]}”", "callback_data": "cc:criar"}],
-                          [{"text": "📋 Escolher da lista", "callback_data": "cc:lista"}]])
+                         [[{"text": f"➕ Cadastrar “{texto.strip()[:28]}”", "callback_data": f"cc:criar@{item['id']}"}],
+                          [{"text": "📋 Escolher da lista", "callback_data": f"cc:lista@{item['id']}"}]])
 
     def _criar_centro(self, chat_id: str, conversa: dict, item: dict, nome: str) -> None:
         nome = re.sub(r"\s+", " ", nome or "").strip()[:60]
@@ -374,7 +374,9 @@ class BotCaixa:
         with self._lock:
             conversa = self._estado["conversas"].get(chat_id)
             item = self._item(conversa["item_id"]) if conversa else None
-        if not conversa or not item:
+        # O botão leva o id do comprovante: um botão de uma conversa antiga não responde pela atual.
+        dado, _, dono = dado.partition("@")
+        if not conversa or not item or (dono and dono != item["id"]):
             self._responder_botao(callback_id, chat_id, message_id, "Esta pergunta já foi respondida.")
             return
         self._responder_botao(callback_id, chat_id, message_id)

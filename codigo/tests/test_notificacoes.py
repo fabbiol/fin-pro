@@ -7,10 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import inicializacao
+from app.banco import BancoBoletos
 from app.notificacoes import canais
 from app.notificacoes.regras import alertas_da_regra, montar_alertas, montar_mensagem
 from app.notificacoes.servico import MASCARA, ServicoNotificacoes
-from app.planilha import PlanilhaBoletos
 
 SEGUNDA = date(2026, 9, 14)
 HOJE = date.today()
@@ -54,7 +54,7 @@ def test_mensagem_lista_os_boletos_e_numero_do_lembrete():
 
 @pytest.fixture()
 def ambiente(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "b.xlsx")
+    planilha = BancoBoletos(tmp_path / "b.db", tmp_path / "b.xlsx")
     enviados = []
     monkeypatch.setattr(canais, "enviar_windows",
                         lambda titulo, corpo, url=None, url_pago=None: enviados.append((titulo, corpo, url_pago)))
@@ -184,7 +184,7 @@ def test_migra_configuracao_da_versao_anterior(tmp_path):
     caminho = tmp_path / "notificacoes.json"
     caminho.write_text(json.dumps({"ativo": True, "horario": "07:30", "dias_antes": 5, "avisar_vencidos": False,
                                    "windows": {"ativo": True}}), encoding="utf-8")
-    servico = ServicoNotificacoes(PlanilhaBoletos(tmp_path / "b.xlsx"), caminho, "http://x")
+    servico = ServicoNotificacoes(BancoBoletos(tmp_path / "b.db", tmp_path / "b.xlsx"), caminho, "http://x")
     regras = {r["id"]: r for r in servico.config_publica()["regras"]}
     assert regras["vencimento"]["horarios"] == ["07:30", "12:00", "16:00"]
     assert regras["antecedencia"]["dias"] == 5 and regras["antecedencia"]["horarios"] == ["07:30"]

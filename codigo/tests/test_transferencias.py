@@ -193,13 +193,13 @@ def test_pdf_so_para_quem_entrou_com_permissao(sistema, operacoes):
 
 
 @pytest.mark.parametrize("enviado, guardado", [("12.345.678/0001-95", "12345678000195"), ("12345678909", "12345678909"),
-                                               ("", ""), (None, "")])
+                                               ("12.ABC.345/01DE-35", "12ABC34501DE35"), ("", ""), (None, "")])
 def test_documento_do_cliente_guardado_so_com_digitos(operacoes, enviado, guardado):
     assert _enviar(operacoes, documento=enviado).status_code == 201
     assert contexto.transferencias.listar()[0]["documento"] == guardado
 
 
-@pytest.mark.parametrize("documento", ["123", "1234567890123", "123456789012345", "12A45678909"])
+@pytest.mark.parametrize("documento", ["123", "1234567890123", "123456789012345", "12A45678909", "12ABC34501DEAB"])
 def test_documento_invalido_recebe_422(operacoes, documento):
     resposta = _enviar(operacoes, documento=documento)
     assert resposta.status_code == 422 and "documento" in resposta.json()["erro"]

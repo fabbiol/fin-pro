@@ -27,6 +27,8 @@ def analisar_texto(texto: str, codigos: list[str] | None = None, forcar: bool = 
     extraido = comprovante.extrair(texto, codigos)
     lista = comprovante.candidatos(extraido, ctx.repositorio.listar(), ctx.repositorio_pix.listar())
     escolhido = None if extraido["agendado"] else comprovante.escolher(lista)
+    if escolhido and escolhido["tem_comprovante"]:
+        escolhido = None  # já tem comprovante: um segundo não paga de novo sozinho, fica para alguém conferir
     return {"extraido": comprovante.publico(extraido), "candidatos": lista, "sugerido": escolhido}
 
 

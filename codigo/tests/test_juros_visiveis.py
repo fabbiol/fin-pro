@@ -30,3 +30,18 @@ def test_painel_mostra_os_juros_pagos_no_mes():
 def test_gastos_mostra_os_juros_do_periodo():
     d = servicos.analise_gastos(REGISTROS, [], hoje=HOJE)
     assert d["juros_multa"] == 87.30 and d["pagos_com_juros"] == 2
+
+
+def test_pago_e_o_que_saiu_de_fato_em_todas_as_telas():
+    pago = 900 + 56.70 + 900 + 30.60 + 210
+    assert servicos.resumir(REGISTROS, HOJE)["valor_pago"] == round(pago, 2)
+    assert servicos.painel(REGISTROS, HOJE)["indicadores"]["pagos_mes_valor"] == round(pago, 2)
+    gastos = servicos.analise_gastos(REGISTROS, [], hoje=HOJE)
+    assert gastos["centros"][0]["pagos"] == round(pago, 2) and gastos["total"] == round(pago + 500, 2)
+
+
+def test_proximos_7_dias_contam_hoje_e_os_6_seguintes():
+    registros = [_boleto(10, 100, status="Pendente", venc=date(2026, 9, 30)),  # hoje + 6: entra
+                 _boleto(11, 200, status="Pendente", venc=date(2026, 10, 1))]  # hoje + 7: fica de fora
+    k = servicos.painel(registros, HOJE)["indicadores"]
+    assert (k["proximos7_qtd"], k["proximos7_valor"]) == (1, 100.0)

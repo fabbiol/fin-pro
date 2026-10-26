@@ -46,12 +46,13 @@ def _texto(campos, nome: str, limite: int, obrigatorio: bool = False) -> str:
 
 
 def documento(valor, campo: str = "documento") -> str:
-    """CPF ou CNPJ só com os dígitos (aceita com pontuação). Vazio é aceito."""
-    texto = str(valor or "").strip()
-    digitos = re.sub(r"\D", "", texto)
-    if texto and (len(digitos) not in (11, 14) or re.search(r"[^\d.\-/\s]", texto)):
-        raise ErroTransferencia(f"{campo} deve ser um CPF (11 dígitos) ou CNPJ (14 dígitos).")
-    return digitos
+    """CPF ou CNPJ sem a pontuação (aceita com pontuação). Vazio é aceito.
+    Desde jul/2026 o CNPJ pode ter letras nas 12 primeiras posições (12.ABC.345/01DE-35)."""
+    texto = str(valor or "").strip().upper()
+    limpo = re.sub(r"[.\-/\s]", "", texto)
+    if texto and not re.fullmatch(r"\d{11}|[0-9A-Z]{12}\d{2}", limpo):
+        raise ErroTransferencia(f"{campo} deve ser um CPF (11 dígitos) ou CNPJ (14 caracteres).")
+    return limpo
 
 
 def validar(campos) -> dict:

@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook, load_workbook
 
 from app import admin, contexto, importacao, main
+from app.banco import BancoBoletos
 from app.fila_gravacao import FilaGravacao
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 from gerar_boleto_exemplo import montar_codigo
 
@@ -114,7 +114,7 @@ def test_xls_gerado_em_html_por_outros_sistemas():
 
 @pytest.fixture
 def cliente(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx", tmp_path / "backups")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx", tmp_path / "backups")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     monkeypatch.setattr(contexto, "planilha", planilha)
     monkeypatch.setattr(contexto, "fila", fila)
@@ -144,6 +144,7 @@ def test_importacao_pela_api(cliente):
     boletos = cliente.get("/api/boletos", params={"por_pagina": 0}).json()["itens"]
     assert {b["beneficiario"] for b in boletos} == {"Posto Central Ltda", "Energia MT", "Oficina Y"}
     assert {b["centro_custo"] for b in boletos} == {"Combustível e Veículos", "Administrativo"}
+    assert contexto.planilha.exportar()  # o Excel é gerado a partir do banco
     aba = load_workbook(contexto.planilha.caminho)["Boletos"]
     coluna = [c.value for c in aba[1]].index("Nome do Arquivo Original") + 1
     assert aba.cell(row=2, column=coluna).value == "Importado de contas.csv"

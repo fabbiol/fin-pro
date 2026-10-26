@@ -253,6 +253,13 @@ def test_relatorios_automaticos(bot):
     assert bot.enviar_relatorios(datetime(2026, 9, 28, 9, 0)) == []  # não repete
 
 
+def test_relatorio_que_o_telegram_recusou_continua_devido(bot, monkeypatch):
+    servico.lancar_abastecimento({"data": SEGUNDA, "maquina": "Gerador", "litros": 60}, "Almir")
+    monkeypatch.setattr(canais, "_telegram", lambda *a, **k: (_ for _ in ()).throw(canais.ErroCanal("fora do ar")))
+    assert bot.enviar_relatorios(datetime(2026, 9, 28, 7, 30)) == []
+    assert bot.relatorios_devidos(datetime(2026, 9, 28, 8, 0)) == [("semana", date(2026, 9, 21))]
+
+
 def test_api_do_diesel(bot, monkeypatch):
     from fastapi.testclient import TestClient
 

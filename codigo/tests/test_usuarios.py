@@ -8,8 +8,8 @@ from openpyxl import load_workbook
 
 from app import acesso, admin, contexto, main, usuarios
 from app.arquivos import RepositorioArquivos
+from app.banco import BancoBoletos
 from app.fila_gravacao import FilaGravacao
-from app.planilha import PlanilhaBoletos
 from app.repositorio import RepositorioBoletos
 
 PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
@@ -17,7 +17,7 @@ PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
 
 @pytest.fixture
 def sistema(tmp_path, monkeypatch):
-    planilha = PlanilhaBoletos(tmp_path / "boletos.xlsx", tmp_path / "backups")
+    planilha = BancoBoletos(tmp_path / "boletos.db", tmp_path / "boletos.xlsx", tmp_path / "backups")
     fila = FilaGravacao(planilha, tmp_path / "fila.json")
     gerenciador = usuarios.GerenciadorUsuarios(tmp_path / "usuarios.json")
     original = contexto.usuarios
@@ -131,3 +131,14 @@ def test_bloqueio_apos_senhas_erradas(tmp_path):
     token, usuario, _ = usuarios.GerenciadorUsuarios(tmp_path / "usuarios.json").entrar("ana", "senha-ana", "10.0.0.9")
     assert token and usuario["nome"] == "Ana"
     assert "senha-ana" not in (tmp_path / "usuarios.json").read_text(encoding="utf-8")
+
+
+def test_edicao_recusada_nao_muda_o_perfil(tmp_path):
+    gerenciador = usuarios.GerenciadorUsuarios(tmp_path / "usuarios.json")
+    gerenciador.criar("Fábio", "fabio", "senha-fabio", perfil="administrador")
+    maria = gerenciador.criar("Maria", "maria", "senha-maria")
+    with pytest.raises(usuarios.ErroUsuario):
+        gerenciador.alterar(maria["id"], perfil="administrador", senha="123")  # senha curta demais
+    with pytest.raises(usuarios.ErroUsuario):
+        gerenciador.alterar(maria["id"], perfil="administrador", nome=" ")
+    assert next(u for u in gerenciador.listar() if u["id"] == maria["id"])["perfil"] == "comum"
