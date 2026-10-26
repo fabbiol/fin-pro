@@ -100,6 +100,7 @@ class BancoBoletos:
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
         self.exportacao = {"pendente": False, "ultima": None, "erro": None, "excel_aberto": False, "ultima_importacao": None}
+        self._mtime_ilegivel = None  # planilha salva no Excel que não deu para ler: não é lida de novo nem sobrescrita
         self.caminho_banco.parent.mkdir(parents=True, exist_ok=True)
         self._criar_tabelas()
 
@@ -480,13 +481,14 @@ class BancoBoletos:
     def exportar(self) -> bool:
         """Gera a planilha Excel a partir do banco. Devolve False se o arquivo estiver aberto no Excel (tenta de novo depois)."""
         with self._lock:
-            self.importar_edicoes_do_excel()
+            if self.importar_edicoes_do_excel() < 0:
+                return False  # não deu para ler o que alguém salvou no Excel: não sobrescreve as edições da pessoa
             versao = self._versao
-            wb = self._montar_planilha()
             self.caminho.parent.mkdir(parents=True, exist_ok=True)
             try:
+                # Arquivo aberto no Excel: confere antes de montar, que é a parte demorada.
                 self.excel._verificar_gravavel() if self.caminho.exists() else None
-                self.excel._salvar(wb)  # grava num temporário e substitui (com o backup diário da planilha)
+                self.excel._salvar(self._montar_planilha())  # grava num temporário e substitui (com o backup diário da planilha)
             except PlanilhaBloqueadaError:
                 self.exportacao.update(excel_aberto=True, pendente=True, erro=None)
                 return False
@@ -514,7 +516,8 @@ class BancoBoletos:
                 self._meta(c, "planilha_mtime", self.caminho.stat().st_mtime_ns, gravar=True)
 
     def importar_edicoes_do_excel(self) -> int:
-        """Se a planilha foi salva por alguém no Excel, aplica no banco os campos que a pessoa alterou."""
+        """Se a planilha foi salva por alguém no Excel, aplica no banco os campos que a pessoa alterou.
+        Devolve quantos lançamentos mudaram, ou -1 se o arquivo não pôde ser lido."""
         if not self.caminho.exists():
             return 0
         with self._lock:
@@ -524,12 +527,14 @@ class BancoBoletos:
             mtime = self.caminho.stat().st_mtime_ns
             if guardado is None or int(guardado) == mtime:
                 return 0
+            if self._mtime_ilegivel == mtime:
+                return -1
             try:
                 leitor = PlanilhaBoletos(self.caminho, abas=self.abas, extras=self.centros)
                 operacoes = []
                 for aba, definicao in self.abas.items():
                     atuais = {r["id"]: r for r in self.listar(aba)}
-                    for linha in leitor.listar(aba):
+                    for linha in leitor.listar_como_esta(aba):
                         base_texto = exportados.get((aba, linha["id"]))
                         if base_texto is None or linha["id"] not in atuais:
                             continue
@@ -540,7 +545,10 @@ class BancoBoletos:
                             operacoes.append({"tipo": "atualizar", "aba": aba, "id": linha["id"], "dados": mudancas, "usuario": USUARIO_EXCEL})
             except Exception:
                 log.exception("Não foi possível ler as edições feitas na planilha Excel")
-                return 0
+                self._mtime_ilegivel = mtime
+                self.exportacao.update(pendente=True, erro="Não deu para ler a planilha Excel salva por alguém. Ela não foi "
+                                       "substituída, para não perder as edições: corrija o arquivo ou apague-o para o sistema gerar de novo.")
+                return -1
             if operacoes:
                 self.aplicar_lote(operacoes)
                 log.info("Planilha Excel: %d lançamento(s) alterado(s) manualmente foram trazidos para o sistema", len(operacoes))

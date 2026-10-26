@@ -13,12 +13,16 @@ export const brl = (v) => (v === null || v === undefined || v === "" ? "—" : f
 export const numeroBR = (v) => (v === null || v === undefined || v === "" ? "" : formatoNumero.format(Number(v)));
 export const compacto = (v) => formatoCompacto.format(Number(v || 0));
 
-/** Converte "1.500,75", "1500.75" ou "R$ 10" em número; "" vira null; inválido vira NaN. */
-export function parseValor(texto) {
+/**
+ * Converte "1.500,75", "1500.75", "1.500" (mil e quinhentos) ou "R$ 10" em número; "" vira null; inválido vira NaN.
+ * Com `{ milhar: false }`, "7.450" é decimal (preço por litro com 3 casas).
+ */
+export function parseValor(texto, { milhar = true } = {}) {
   if (typeof texto === "number") return texto;
   const limpo = String(texto ?? "").replace(/[R$\s]/g, "");
   if (!limpo) return null;
-  const numero = limpo.includes(",") ? Number(limpo.replace(/\./g, "").replace(",", ".")) : Number(limpo);
+  const comMilhar = limpo.includes(",") || (milhar && /^[1-9]\d{0,2}(\.\d{3})+$/.test(limpo));
+  const numero = comMilhar ? Number(limpo.replace(/\./g, "").replace(",", ".")) : Number(limpo);
   return Number.isFinite(numero) ? Math.round(numero * 100) / 100 : NaN;
 }
 

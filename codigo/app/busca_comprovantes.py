@@ -235,7 +235,7 @@ def _valor_pesquisado(texto: str) -> float | None:
     texto = (texto or "").strip().replace("R$", "").replace(" ", "")
     if not texto:
         return None
-    if "," in texto:
+    if "," in texto or re.fullmatch(r"[1-9]\d{0,2}(\.\d{3})+", texto):  # "1.500" é mil e quinhentos
         texto = texto.replace(".", "").replace(",", ".")
     try:
         return round(float(texto), 2)

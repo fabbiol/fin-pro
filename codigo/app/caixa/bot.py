@@ -75,6 +75,7 @@ class BotCaixa:
             from .leitura import analisar as ler
         self.ler = ler
         self._lock = threading.RLock()
+        self._lancando: set[str] = set()  # itens sendo lançados agora (não vai para o arquivo)
         self._verificando = threading.Lock()
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
@@ -184,8 +185,16 @@ class BotCaixa:
             item = self._item(id_)
             if not item or item["estado"] not in ("pendente", "conversa", "erro"):
                 raise servico.ErroCaixa("Este comprovante não está mais esperando revisão.")
+            # Dois cliques em "Lançar" (ou duas pessoas ao mesmo tempo): só o primeiro lança.
+            if id_ in self._lancando:
+                raise servico.ErroCaixa("Este comprovante já está sendo lançado.")
+            self._lancando.add(id_)
             arquivo = copy.deepcopy(item.get("arquivo"))
-        registro = servico.lancar({**self.dados_preenchidos(item), **dados}, usuario, arquivo)
+        try:
+            registro = servico.lancar({**self.dados_preenchidos(item), **dados}, usuario, arquivo)
+        finally:
+            with self._lock:
+                self._lancando.discard(id_)
         with self._lock:
             item.update(estado="lancado", concluido_em=_agora(), criado=registro["id"], erro=None)
             self._encerrar_conversa_do_item(item)

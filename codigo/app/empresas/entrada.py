@@ -56,6 +56,7 @@ class CaixaNotas:
         self.comandos = comandos
         self._comandos_registrados: str | None = None
         self._lock = threading.RLock()
+        self._lancando: set[str] = set()  # itens sendo lançados agora (não vai para o arquivo)
         self._verificando = threading.Lock()
         self._parar = threading.Event()
         self._thread: threading.Thread | None = None
@@ -294,9 +295,21 @@ class CaixaNotas:
 
     def confirmar(self, id_: str, tipo: str, dados: dict, usuario: str) -> dict:
         """Alguém conferiu na tela o que o robô leu e mandou lançar."""
-        item = self.obter(id_)
-        if not item or item["estado"] not in ("pendente", "erro"):
-            raise servico.ErroEmpresas("Este arquivo não está mais aguardando conferência.")
+        with self._lock:
+            item = self.obter(id_)
+            if not item or item["estado"] not in ("pendente", "erro"):
+                raise servico.ErroEmpresas("Este arquivo não está mais aguardando conferência.")
+            # Dois cliques em "Lançar" (ou duas pessoas ao mesmo tempo): só o primeiro lança.
+            if id_ in self._lancando:
+                raise servico.ErroEmpresas("Este arquivo já está sendo lançado.")
+            self._lancando.add(id_)
+        try:
+            return self._lancar_conferido(id_, item, tipo, dados, usuario)
+        finally:
+            with self._lock:
+                self._lancando.discard(id_)
+
+    def _lancar_conferido(self, id_: str, item: dict, tipo: str, dados: dict, usuario: str) -> dict:
         arquivo = item.get("arquivo")
         if tipo == "nota":
             empresa = dados.get("empresa") or item.get("empresa")

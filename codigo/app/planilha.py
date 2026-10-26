@@ -28,6 +28,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from .importacao import ler_valor
+
 ABA_BOLETOS = "Boletos"
 ABA_PIX = "Pix"
 ABA_RESUMO = "Resumo"
@@ -419,18 +421,19 @@ class PlanilhaBoletos:
             except (TypeError, ValueError):
                 return None
         if chave in CAMPOS_NUMERO:
+            if isinstance(valor, (int, float)):
+                return round(float(valor), 4)
+            # Texto digitado no Excel: "1.234,5" ou "1234.5" (o ponto sozinho é decimal; só some com vírgula ou vários).
+            texto = str(valor).replace(" ", "").strip()
+            texto = texto.replace(".", "").replace(",", ".") if "," in texto or texto.count(".") > 1 else texto
             try:
-                return round(float(str(valor).replace(".", "").replace(",", ".").strip()), 4) if not isinstance(valor, (int, float)) \
-                    else round(float(valor), 4)
+                return round(float(texto), 4)
             except ValueError:
                 return None
         if chave in CAMPOS_MOEDA:
             if isinstance(valor, (int, float)):
                 return round(float(valor), 2)
-            try:
-                return round(float(str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()), 2)
-            except ValueError:
-                return None
+            return ler_valor(valor)  # "1.234,56", "1234.56" e "1.500" (mil e quinhentos), como na importação
         if chave in ROTULOS:
             texto = str(valor).strip()
             for codigo, rotulo in ROTULOS[chave].items():
@@ -441,7 +444,9 @@ class PlanilhaBoletos:
             return str(int(valor))
         return str(valor).strip()
 
-    def _ler_registros(self, wb, definicao: DefinicaoAba) -> list[dict]:
+    def _ler_registros(self, wb, definicao: DefinicaoAba, so_presentes: bool = False) -> list[dict]:
+        """Linhas da aba. Com ``so_presentes``, só os campos cujo título está no cabeçalho: coluna renomeada ou apagada
+        no Excel fica de fora, em vez de parecer que a pessoa apagou o valor em todas as linhas."""
         if definicao.nome not in wb.sheetnames:
             return []
         linhas = wb[definicao.nome].iter_rows(values_only=True)
@@ -455,11 +460,11 @@ class PlanilhaBoletos:
             registro = {
                 c.chave: self._converter_leitura(
                     c.chave, linha[indices[c.chave]] if c.chave in indices and indices[c.chave] < len(linha) else None, definicao)
-                for c in definicao.colunas
+                for c in definicao.colunas if not so_presentes or c.chave in indices
             }
-            if registro["id"] is None:
+            if registro.get("id") is None:
                 continue
-            if definicao.tem("status"):
+            if definicao.tem("status") and "status" in registro:
                 registro["status"] = (registro["status"] if registro["status"] in definicao.status_validos
                                       else definicao.status_padrao)
             registros.append(registro)
@@ -483,6 +488,11 @@ class PlanilhaBoletos:
     def listar(self, aba: str = "boletos") -> list[dict]:
         definicao = self.abas[aba]
         return self._ler_com_cache(aba, lambda wb: self._ler_registros(wb, definicao))
+
+    def listar_como_esta(self, aba: str = "boletos") -> list[dict]:
+        """Como ``listar``, mas só com as colunas que existem no arquivo (para trazer edições feitas no Excel)."""
+        definicao = self.abas[aba]
+        return self._ler_com_cache(aba + ":presentes", lambda wb: self._ler_registros(wb, definicao, so_presentes=True))
 
     def obter(self, id_: int, aba: str = "boletos") -> dict:
         for registro in self.listar(aba):
@@ -606,7 +616,7 @@ class PlanilhaBoletos:
                              usuario: str = "", campo_data: str = "vencimento", campo_valor: str = "valor") -> None:
         ws.append([quando, acao, registro.get("id"), registro.get(campo_nome) or "", registro.get(campo_data),
                    registro.get(campo_valor), detalhes, usuario or None])
-        linha = ws.max_row
+        linha = ws._current_row  # a linha recém-acrescentada; ws.max_row percorre a aba inteira a cada chamada
         ws.cell(row=linha, column=1).number_format = "dd/mm/yyyy hh:mm"
         ws.cell(row=linha, column=5).number_format = "dd/mm/yyyy"
         ws.cell(row=linha, column=6).number_format = '"R$" #,##0.00'
