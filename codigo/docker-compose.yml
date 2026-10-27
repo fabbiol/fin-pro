@@ -13,11 +13,22 @@ services:
       TZ: "America/Cuiaba"
       # Senha da integração com a Operações (aba Transferências de clientes).
       OPERACOES_TOKEN: ${OPERACOES_TOKEN:-}
+      # API Pix do Bradesco (Pix recebidos na aba Transferências de clientes). Os valores ficam no Ambiente do EasyPanel,
+      # nunca aqui. Sem eles, a consulta fica desligada e a tela explica o que falta.
+      BRADESCO_AMBIENTE: ${BRADESCO_AMBIENTE:-}  # sandbox (padrão) ou producao
+      BRADESCO_CLIENT_ID: ${BRADESCO_CLIENT_ID:-}
+      BRADESCO_CLIENT_SECRET: ${BRADESCO_CLIENT_SECRET:-}
+      BRADESCO_CERT: ${BRADESCO_CERT:-}  # caminho dentro do container, ex.: /certs/producao.crt
+      BRADESCO_KEY: ${BRADESCO_KEY:-}  # ex.: /certs/client.key.pem
+      BRADESCO_HOST: ${BRADESCO_HOST:-}
+      BRADESCO_TOKEN_PATH: ${BRADESCO_TOKEN_PATH:-}
     volumes:
       - /opt/finpro/dados:/app/dados
       # Pasta do backup total, fora da pasta de dados como o backup exige (na VPS: /opt/finpro/backup). O sistema
       # passa a usá-la sozinho quando a pasta configurada não existe (LEITOR_BACKUP_PASTA).
       - /opt/finpro/backup:/backup
+      # Certificado e chave da API Pix do Bradesco (na VPS: /opt/finpro/certs, fora do Git), só leitura no container.
+      - /opt/finpro/certs:/certs:ro
     expose:
       - "8000"
     healthcheck:
