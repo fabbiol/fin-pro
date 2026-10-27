@@ -683,8 +683,40 @@ sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, sep
 Um comprovante pode pagar várias notas, mas o **mesmo comprovante** (mesmo ID da transação) não pode ser ligado duas
 vezes: o Fin Pro avisa já na leitura. Nota que já está paga também não entra. Ligou errado? **Desfazer** volta todas as
 notas daquele pagamento para **Aguardando pagamento**; o pagamento e o comprovante continuam guardados como "desfeito",
-e o comprovante pode ser ligado de novo às notas certas. A conferência com o extrato do banco e a marcação automática
-ficam para o próximo passo.
+e o comprovante pode ser ligado de novo às notas certas.
+
+**Pix recebidos no Bradesco (API Pix):** com a API ligada, a tela ganha o cartão **Pix recebidos no Bradesco**. Ao abrir
+a tela (ou no botão **Buscar Pix**, com o período De/Até, até 31 dias), o Fin Pro consulta os Pix que entraram na conta e
+procura a nota **Aguardando pagamento** que bate pelo **CNPJ/CPF de quem pagou** e pelo **valor exato**:
+
+- **Sugestões**: o Pix e a nota batem certinho. Também acha um Pix que paga várias notas, vários Pix que pagam uma nota e
+  vários Pix que pagam várias notas do mesmo cliente. Confira e clique em **Confirmar**: só então as notas viram **Pago**.
+  Nada vira Pago sozinho.
+- **Para conferir**: há nota possível, mas sem correspondência exata (dois Pix ou duas notas com o mesmo valor, valor que
+  não fecha, outra filial da mesma empresa, Pix sem o CNPJ/CPF, nota sem o CNPJ/CPF, pagador diferente, Pix com
+  devolução). O motivo aparece embaixo do Pix, com as notas que podem ser. Marque o Pix e as notas (no próprio cartão ou
+  na tabela) e clique em **Ligar aos Pix marcados**; a janela mostra a soma e a diferença antes de ligar.
+- **Pix sem nota parecida** e **Pix já ligados a um pagamento** ficam recolhidos no fim do cartão.
+
+O pagamento usa o mesmo **Ligar pagamento**: o **ID da transação** é o **endToEndId** do Pix (com vários Pix, os
+endToEndId ficam juntos, separados por vírgula) e a coluna **Origem** da aba Pagamentos diz **API Pix Bradesco** (ou
+**Comprovante**, quando foi ligado à mão). O mesmo Pix nunca paga duas vezes, nem pela API nem por um comprovante com o
+mesmo ID. Valor, data e pagador vêm da consulta ao banco, não da tela. **Desfazer** devolve o Pix para as sugestões.
+TED/DOC continuam pelo comprovante: a API Pix só traz Pix (o Bradesco tem uma API de saldo e extrato, mas ela é um
+produto à parte, contratado com o gerente).
+
+**Como ligar a API Pix do Bradesco** (no Easypanel, aba Ambiente; o `docker-compose.yml` repassa as variáveis):
+
+| Variável | O que é |
+|---|---|
+| `BRADESCO_AMBIENTE` | `sandbox` (teste, o padrão) ou `producao` |
+| `BRADESCO_CLIENT_ID` e `BRADESCO_CLIENT_SECRET` | o par da credencial criada no portal do Bradesco para este certificado |
+| `BRADESCO_CERT` e `BRADESCO_KEY` | caminho, dentro do container, do certificado e da chave (PEM, chave sem senha), ex.: `/certs/producao.crt` e `/certs/client.key.pem` |
+| `BRADESCO_HOST` e `BRADESCO_TOKEN_PATH` | opcionais: trocam o endereço e o caminho do token (sandbox: `openapisandbox.prebanco.com.br` e `/auth/server/oauth/token`; produção: `qrpix.bradesco.com.br` e `/v2/oauth/token`) |
+
+Os certificados ficam na VPS em `/opt/finpro/certs` (fora do Git), montada no container como `/certs` **somente
+leitura**. Faltando alguma variável ou arquivo, o cartão diz o que falta e o resto da tela continua funcionando. O token do
+banco fica só na memória e o Client Secret nunca aparece em tela nem no registro.
 
 **Como ligar:** o Fin Pro e a Operações precisam do **mesmo token** (uma senha longa, só para isso). No Fin Pro ele vai
 na variável `OPERACOES_TOKEN` (no `.env` ou no Easypanel); sem ela, a entrada fica desligada e a Operações recebe o aviso.
@@ -700,7 +732,11 @@ Rotas da tela (com login e a permissão `transferencias`): `POST /api/transferen
 `arquivo`; devolve o que leu, o `arquivo` guardado e `ja_usado`), `POST /api/transferencias/pagamentos` (JSON com `ids`
 das notas, `arquivo`, `valor`, `data`, `pagador`, `documento_pagador`, `id_transacao`, `observacao`; recusa com 409
 `nota_ja_paga` ou `comprovante_repetido` e 404 `nota_nao_encontrada`), `GET /api/transferencias/pagamentos/{id}/comprovante`
-e `POST /api/transferencias/pagamentos/{id}/desfazer`.
+e `POST /api/transferencias/pagamentos/{id}/desfazer`. Bradesco: `GET /api/transferencias/bradesco` (ligada ou o
+`motivo`, período padrão e a última consulta conciliada: `sugestoes`, `conferir`, `sem_nota`, `ligados`),
+`POST /api/transferencias/bradesco/consultar` (JSON `inicio` e `fim`, `AAAA-MM-DD`; 503 `bradesco_desligado`, 502
+`bradesco_falhou`, 422 período inválido) e `POST /api/transferencias/pagamentos/pix` (JSON com `ids` das notas, `pix`
+com os endToEndId e `observacao`; 409 `pix_nao_consultado`, `pix_devolvido`, `nota_ja_paga` ou `comprovante_repetido`).
 Dados em `dados\transferencias.db`, com a planilha `transferencias.xlsx` (abas **Transferências** e **Pagamentos**).
 
 ---
