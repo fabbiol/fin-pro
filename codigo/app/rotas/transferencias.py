@@ -1,10 +1,11 @@
-"""API das transferências de clientes: a entrada da integração com a Operações (só com o token), a tela e o ligar
-pagamento (comprovante Pix/TED ligado a uma ou mais notas)."""
+"""API das transferências de clientes: a entrada da integração com a Operações (só com o token), a tela, o ligar
+pagamento (comprovante Pix/TED ligado a uma ou mais notas) e a conciliação com os Pix recebidos no Bradesco."""
 
 from __future__ import annotations
 
 import hmac
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, File, Request
 from fastapi import UploadFile as Upload
@@ -34,6 +35,19 @@ class LigarEntrada(BaseModel):
     pagador: str | None = Field(None, max_length=200)
     documento_pagador: str | None = Field(None, max_length=30)
     id_transacao: str | None = Field(None, max_length=120)
+    observacao: str | None = Field(None, max_length=500)
+
+
+class ConsultaEntrada(BaseModel):
+    """Período da consulta ao Bradesco (datas AAAA-MM-DD)."""
+    inicio: str = Field(..., max_length=10)
+    fim: str = Field(..., max_length=10)
+
+
+class LigarPixEntrada(BaseModel):
+    """Notas e Pix (endToEndId) que o dono confirmou. Valor, data e pagador vêm da consulta ao banco."""
+    ids: list[int] = Field(..., min_length=1, max_length=500)
+    pix: list[Annotated[str, Field(max_length=40)]] = Field(..., min_length=1, max_length=20)
     observacao: str | None = Field(None, max_length=500)
 
 
@@ -133,4 +147,34 @@ def desfazer_pagamento(id_: int, request: Request):
     """As notas voltam a Aguardando pagamento; o pagamento fica guardado como desfeito (com o comprovante)."""
     resposta = _pagamento(servico.desfazer, id_, autor(request))
     log.info("Pagamento %s desfeito (%s)", id_, autor(request))
+    return resposta
+
+
+# --------------------------------------------------------------------------- Pix recebidos no Bradesco (API Pix)
+
+
+@router.get("/api/transferencias/bradesco")
+def situacao_bradesco():
+    """Se a consulta está ligada (ou por que não está), o período padrão e a última consulta já conciliada."""
+    return servico.situacao_bradesco()
+
+
+@router.post("/api/transferencias/bradesco/consultar")
+def consultar_bradesco(entrada: ConsultaEntrada, request: Request):
+    """Busca os Pix recebidos no Bradesco e sugere as notas. Não liga nada: cada sugestão é confirmada na tela."""
+    try:
+        resposta = servico.consultar_bradesco(entrada.inicio, entrada.fim)
+    except servico.ErroPagamento as exc:
+        log.warning("Consulta dos Pix no Bradesco não deu certo (%s): %s", exc.codigo, exc)
+        raise erro(exc.status, exc.codigo, str(exc)) from None
+    log.info("Pix do Bradesco consultados de %s a %s: %s Pix (%s)", entrada.inicio, entrada.fim,
+             resposta["consulta"]["total"], autor(request))
+    return resposta
+
+
+@router.post("/api/transferencias/pagamentos/pix", status_code=201)
+def ligar_pix(entrada: LigarPixEntrada, request: Request):
+    resposta = _pagamento(servico.ligar_pix, entrada.ids, entrada.pix, entrada.observacao or "", autor(request))
+    log.info("Pix %s ligados às notas %s no pagamento %s (%s)", resposta["pagamento"]["id_transacao"],
+             resposta["pagamento"]["notas"], resposta["pagamento"]["id"], autor(request))
     return resposta
