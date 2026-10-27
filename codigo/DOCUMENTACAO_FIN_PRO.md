@@ -715,7 +715,11 @@ produto à parte, contratado com o gerente).
 | `BRADESCO_HOST` e `BRADESCO_TOKEN_PATH` | opcionais: trocam o endereço e o caminho do token (sandbox: `openapisandbox.prebanco.com.br` e `/auth/server/oauth/token`; produção: `qrpix.bradesco.com.br` e `/v2/oauth/token`) |
 
 Os certificados ficam na VPS em `/opt/finpro/certs` (fora do Git), montada no container como `/certs` **somente
-leitura**. Faltando alguma variável ou arquivo, o cartão diz o que falta e o resto da tela continua funcionando. O token do
+leitura**. Para mandar o certificado e a chave do Windows para a VPS (também na renovação anual), ponha numa mesma pasta
+`ferramentas\enviar_certificados_bradesco.ps1`, o certificado, a chave e o `.env.production`, clique com o botão
+direito no script e escolha **Executar com o PowerShell**. Ele pede o IP e a senha do root (na própria janela), copia
+os arquivos, deixa só o root ler, confere se o certificado e a chave são um par e a validade, e copia para a área de
+transferência as linhas do Ambiente do EasyPanel. Faltando alguma variável ou arquivo, o cartão diz o que falta e o resto da tela continua funcionando. O token do
 banco fica só na memória e o Client Secret nunca aparece em tela nem no registro.
 
 **Como ligar:** o Fin Pro e a Operações precisam do **mesmo token** (uma senha longa, só para isso). No Fin Pro ele vai
