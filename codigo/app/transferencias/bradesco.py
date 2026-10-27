@@ -76,7 +76,8 @@ def _cliente(cfg: Configuracao) -> httpx.Client:
     contexto = ssl.create_default_context(cafile=certifi.where())
     contexto.minimum_version = ssl.TLSVersion.TLSv1_2
     try:
-        contexto.load_cert_chain(cfg.cert, cfg.key)
+        # chave com senha: dá erro em vez de o OpenSSL parar esperando alguém digitar a senha no terminal
+        contexto.load_cert_chain(cfg.cert, cfg.key, password=lambda: b"")
     except (ssl.SSLError, OSError):
         raise ErroBradesco("O certificado ou a chave do Bradesco não puderam ser lidos. Confira os arquivos de "
                            "BRADESCO_CERT e BRADESCO_KEY (formato PEM, chave sem senha).") from None
