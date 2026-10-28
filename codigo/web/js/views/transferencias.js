@@ -129,12 +129,12 @@ async function aoClicar(e) {
     desenharTabela(linhasAtuais);
     desenharLote();
     desenharBradesco();
-  } else if (acao === "desfazer") {
+  } else if (acao === "desfazer" || acao === "excluir") {
     const linha = linhasAtuais.find((t) => String(t.id) === botao.dataset.id);
-    if (!linha?.pagamento) return;
+    if (!linha || (acao === "desfazer" && !linha.pagamento)) return;
     botao.disabled = true;
     try {
-      await desfazer(linha.pagamento);
+      await (acao === "desfazer" ? desfazer(linha.pagamento) : excluir(linha));
     } finally {
       botao.disabled = false;
     }
@@ -206,7 +206,11 @@ function celulaSituacao(t) {
 
 function celulaAcoes(t) {
   const p = t.pagamento;
-  if (!p) return `<td class="col-acoes"></td>`;
+  if (!p) {
+    return `<td class="col-acoes">${t.status === AGUARDANDO
+      ? `<button class="btn-icone" data-acao="excluir" data-id="${t.id}" title="Excluir a nota (mandada por engano, cancelada…)"
+          aria-label="Excluir a nota ${esc(t.nota)}">${icone("lixeira", 16)}</button>` : ""}</td>`;
+  }
   return `<td class="col-acoes">
     ${p.comprovante ? `<a class="btn-icone marcado" href="${ROTA_PAGAMENTOS}/${p.id}/comprovante" target="_blank" rel="noopener"
         title="Abrir o comprovante do pagamento" aria-label="Abrir o comprovante do pagamento da nota ${esc(t.nota)}">${icone("clipe", 16)}</a>` : ""}
@@ -229,7 +233,7 @@ function desenharTabela(linhas) {
     <thead><tr><th class="col-check"><input type="checkbox" data-marcar="todos" ${todas ? "checked" : ""} ${marcaveis.length ? "" : "disabled"}
         aria-label="Marcar todas as notas aguardando pagamento"></th>
       <th>Nota</th><th>Pedido</th><th>Cliente</th><th class="num">Valor</th><th>Material</th>
-      <th>Emissão</th><th>Forma</th><th>Situação</th><th class="col-acoes">Pagamento</th></tr></thead>
+      <th>Emissão</th><th>Forma</th><th>Situação</th><th class="col-acoes">Ações</th></tr></thead>
     <tbody>${linhas.map((t) => `<tr class="${selecionadas.has(t.id) ? "selecionado" : ""}">
       <td class="col-check">${t.status === AGUARDANDO
         ? `<input type="checkbox" data-marcar="${t.id}" ${selecionadas.has(t.id) ? "checked" : ""} aria-label="Marcar a nota ${esc(t.nota)}">` : ""}</td>
@@ -408,6 +412,26 @@ function abrirLigar(notas) {
   botaoConfirmar.addEventListener("click", confirmarLigacao);
   formulario.addEventListener("submit", confirmarLigacao);
   desenharEnvio("vazio");
+}
+
+async function excluir(t) {
+  const ok = await confirmar({
+    titulo: "Excluir nota",
+    mensagem: `Excluir a nota ${t.nota} (${t.empresa}, ${brl(t.valor)})? Ela sai desta lista e da planilha, e a exclusão fica `
+      + "registrada no Histórico. Se a Operações mandar esta nota de novo, ela volta.",
+    textoConfirmar: "Excluir",
+    perigo: true,
+  });
+  if (!ok) return;
+  try {
+    await api.del(`/api/transferencias/${t.id}`);
+  } catch (erro) {
+    toast(mensagemErro(erro), "erro", { duracao: 6000 });
+    return;
+  }
+  selecionadas.delete(t.id);
+  toast(`Nota ${t.nota} excluída.`, "info", { duracao: 5000 });
+  carregar();
 }
 
 async function desfazer(p) {

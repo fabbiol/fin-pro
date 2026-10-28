@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Request
 from fastapi import UploadFile as Upload
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 from starlette.datastructures import UploadFile
 
@@ -90,6 +90,17 @@ async def receber_nota_da_operacoes(request: Request):
 @router.get("/api/transferencias")
 def listar(empresa: str = "", situacao: str = "", q: str = ""):
     return servico.listar(empresa, situacao, q)
+
+
+@router.delete("/api/transferencias/{id_}", status_code=204)
+def excluir_nota(id_: int, request: Request):
+    """Exclui a nota que aguarda pagamento (ex.: mandada por engano). Nota paga não sai: desfaça o pagamento antes."""
+    try:
+        nota = servico.excluir(id_, autor(request))
+    except servico.ErroPagamento as exc:
+        raise erro(exc.status, exc.codigo, str(exc)) from None
+    log.info("Nota %s (ordem %s da Operações) excluída (%s)", nota["nota"], nota["origem_id"], autor(request))
+    return Response(status_code=204)
 
 
 @router.get("/api/transferencias/{id_}/pdf")

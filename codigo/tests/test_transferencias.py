@@ -354,6 +354,43 @@ def test_desfazer_volta_as_notas_e_guarda_o_pagamento(tela):
     assert religado.status_code == 201 and religado.json()["pagamento"]["id"] == 2
 
 
+def test_exclui_nota_aguardando_e_fica_no_historico(tela):
+    excluida = tela.delete("/api/transferencias/2")
+    assert excluida.status_code == 204, excluida.text
+    assert sorted(_linhas(tela)) == ["100", "300"]
+    [evento] = [e for e in contexto.transferencias.historico_do_registro(2) if e["acao"] == "Exclusão"]
+    assert evento["usuario"] == "Computador principal" and evento["detalhes"] == "5" * 44  # a chave de acesso da nota
+    sumida = tela.delete("/api/transferencias/2")
+    assert sumida.status_code == 404 and sumida.json()["detail"]["codigo"] == "nota_nao_encontrada"
+
+    # se a Operações mandar a mesma ordem de novo, ela volta como nota nova
+    assert _enviar(tela, origem_id="2", nota="200", valor="1905.60").json() == {"ok": True, "id": 4, "situacao": "criada"}
+    assert sorted(_linhas(tela)) == ["100", "200", "300"]
+
+
+def test_nota_paga_nao_e_excluida_antes_de_desfazer(tela):
+    assert _ligar(tela, [1], _ler(tela)["arquivo"]).status_code == 201
+    paga = tela.delete("/api/transferencias/1")
+    assert paga.status_code == 409 and paga.json()["detail"]["codigo"] == "nota_paga"
+    assert "Desfaça o pagamento" in paga.json()["detail"]["mensagem"] and _linhas(tela)["100"]["status"] == "Pago"
+    assert tela.post("/api/transferencias/pagamentos/1/desfazer").status_code == 200
+    assert tela.delete("/api/transferencias/1").status_code == 204
+    assert "100" not in _linhas(tela)
+
+
+def test_excluir_so_com_login_e_permissao(sistema, tela):
+    sistema.criar("Almir", "almir", "almir-2026", permissoes=["lancar", "pagar"])
+    with TestClient(main.app, client=CELULAR) as celular:
+        assert celular.delete("/api/transferencias/1").status_code == 401
+        _entrar(celular, "almir", "almir-2026")
+        negado = celular.delete("/api/transferencias/1")
+        assert negado.status_code == 403 and negado.json()["detail"]["permissao"] == "transferencias"
+    with TestClient(main.app, client=CELULAR) as celular:
+        assert _enviar(celular, origem_id="9", pdf=None).status_code == 201  # o token da Operações não serve para excluir
+        assert celular.delete("/api/transferencias/1", headers={"Authorization": f"Bearer {TOKEN}"}).status_code == 401
+    assert len(_linhas(tela)) == 4
+
+
 def test_reenvio_da_operacoes_nao_muda_o_pagamento(tela):
     assert _ligar(tela, [1], _ler(tela)["arquivo"]).status_code == 201
     reenvio = _enviar(tela, origem_id="1", nota="100", valor="2000.00", documento="12345678909")
