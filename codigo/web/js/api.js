@@ -13,6 +13,12 @@ export class ApiError extends Error {
   }
 }
 
+// Página HTML no lugar da resposta (ex.: o EasyPanel avisando que o serviço não responde, durante uma implantação):
+// mostra uma mensagem clara em vez do código da página.
+const SEM_RESPOSTA = "O Fin Pro não respondeu agora (ele pode estar reiniciando, por exemplo logo depois de Implantar). "
+  + "Espere um minuto e atualize a página.";
+const detalheDoErro = (dados) => (typeof dados === "string" && /^\s*</.test(dados) ? SEM_RESPOSTA : dados?.detail ?? dados);
+
 function montarUrl(caminho, params) {
   const url = new URL(caminho, location.origin);
   Object.entries(params || {}).forEach(([chave, valor]) => {
@@ -36,7 +42,7 @@ async function requisitar(metodo, caminho, { corpo, params } = {}) {
   const tipo = resposta.headers.get("content-type") || "";
   const dados = tipo.includes("json") ? await resposta.json() : await resposta.text();
   if (!resposta.ok) {
-    const erro = new ApiError(resposta.status, dados?.detail ?? dados);
+    const erro = new ApiError(resposta.status, detalheDoErro(dados));
     avisarAcesso(erro);
     throw erro;
   }
@@ -59,7 +65,7 @@ function enviarComProgresso(url, arquivo, aoProgresso) {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve(dados);
       } else {
-        const erro = new ApiError(xhr.status, dados?.detail ?? dados);
+        const erro = new ApiError(xhr.status, detalheDoErro(dados));
         avisarAcesso(erro);
         reject(erro);
       }

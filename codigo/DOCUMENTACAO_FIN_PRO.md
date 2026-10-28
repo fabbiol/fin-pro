@@ -670,6 +670,9 @@ sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, sep
 - Filtros por cliente e situação, e busca pelo número da nota.
 - Se a Operações mandar a mesma nota de novo (por exemplo, corrigida), a linha é **atualizada**, nunca duplicada. Isso
   não muda a situação nem o pagamento já ligado.
+- **Excluir nota** (lixeira na linha): para nota mandada por engano ou cancelada. Só sai nota **Aguardando pagamento**;
+  nota paga precisa ter o pagamento desfeito antes. A exclusão fica registrada no Histórico, e se a Operações mandar a
+  mesma nota de novo, ela volta como nota nova.
 - Quem vê e mexe na tela: quem tem a permissão **Transferências** (o administrador já tem).
 
 **Ligar o pagamento:** quem paga por transferência nem sempre é a pessoa da nota. Então o pagamento é ligado à mão:
@@ -735,7 +738,8 @@ Rotas da tela (com login e a permissão `transferencias`): `POST /api/transferen
 `arquivo`; devolve o que leu, o `arquivo` guardado e `ja_usado`), `POST /api/transferencias/pagamentos` (JSON com `ids`
 das notas, `arquivo`, `valor`, `data`, `pagador`, `documento_pagador`, `id_transacao`, `observacao`; recusa com 409
 `nota_ja_paga` ou `comprovante_repetido` e 404 `nota_nao_encontrada`), `GET /api/transferencias/pagamentos/{id}/comprovante`
-e `POST /api/transferencias/pagamentos/{id}/desfazer`. Bradesco: `GET /api/transferencias/bradesco` (ligada ou o
+e `POST /api/transferencias/pagamentos/{id}/desfazer`. Excluir: `DELETE /api/transferencias/{id}` (204; 409
+`nota_paga`, 404 `nota_nao_encontrada`). Bradesco: `GET /api/transferencias/bradesco` (ligada ou o
 `motivo`, período padrão e a última consulta conciliada: `sugestoes`, `conferir`, `sem_nota`, `ligados`),
 `POST /api/transferencias/bradesco/consultar` (JSON `inicio` e `fim`, `AAAA-MM-DD`; 503 `bradesco_desligado`, 502
 `bradesco_falhou`, 422 período inválido) e `POST /api/transferencias/pagamentos/pix` (JSON com `ids` das notas, `pix`

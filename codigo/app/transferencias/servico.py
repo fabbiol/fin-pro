@@ -6,6 +6,8 @@
   ou confirma um Pix recebido no Bradesco (API Pix): um pagamento pode cobrir várias notas e juntar vários Pix.
   Desfazer o pagamento volta as notas; o pagamento fica guardado como desfeito.
 * O mesmo Pix (endToEndId) ou o mesmo comprovante (ID da transação) nunca paga duas vezes.
+* Nota mandada por engano pode ser excluída enquanto aguarda pagamento (fica no Histórico). Se a Operações mandar a
+  mesma ordem de novo, ela volta como nota nova.
 * A conciliação com o Bradesco só **sugere**: nada vira Pago sem alguém confirmar.
 """
 
@@ -34,7 +36,7 @@ class ErroTransferencia(ValueError):
 
 
 class ErroPagamento(ValueError):
-    """Não deu para ligar ou desfazer o pagamento: ``status`` e ``codigo`` vão na resposta para a tela."""
+    """Não deu para fazer o que a tela pediu (ligar, desfazer, excluir): ``status`` e ``codigo`` vão na resposta."""
 
     def __init__(self, status: int, codigo: str, mensagem: str):
         super().__init__(mensagem)
@@ -116,6 +118,20 @@ def receber(dados: dict, pdf: bytes | None = None, nome_pdf: str = "") -> tuple[
         if anterior:
             ctx.arquivos.remover(anterior)  # o PDF trocado não fica perdido na pasta de arquivos
     return registro, existente is None
+
+
+def excluir(id_: int, usuario: str) -> dict:
+    """Exclui a nota que aguarda pagamento e devolve como ela era. Nota paga não sai: desfaça o pagamento antes.
+    O PDF da nota fica até a limpeza automática dos arquivos sem uso, como nas outras telas."""
+    banco = ctx.transferencias
+    with _lock:
+        nota = next((r for r in banco.listar() if r["id"] == id_), None)
+        if nota is None:
+            raise ErroPagamento(404, "nota_nao_encontrada", "Nota não encontrada. Atualize a tela e tente de novo.")
+        if nota.get("status") != AGUARDANDO or nota.get("pagamento_id"):
+            raise ErroPagamento(409, "nota_paga", f"A nota {nota['nota']} está paga. Desfaça o pagamento antes de excluir.")
+        banco.excluir(id_, usuario=usuario)
+    return nota
 
 
 def _normalizar(texto) -> str:
