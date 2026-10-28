@@ -52,5 +52,13 @@ def operacoes_token() -> str:
     return (os.getenv("OPERACOES_TOKEN") or "").strip()
 
 
+def bradesco_pix() -> dict[str, str]:
+    """API Pix do Bradesco (aba Transferências de clientes), lida a cada uso. Faltando credencial ou certificado, a
+    consulta dos Pix recebidos fica desligada. Os valores ficam no Ambiente do EasyPanel; os certificados, numa pasta
+    da VPS montada como somente leitura."""
+    return {nome: (os.getenv(f"BRADESCO_{nome.upper()}") or "").strip()
+            for nome in ("ambiente", "client_id", "client_secret", "cert", "key", "host", "token_path")}
+
+
 def ia_configurada() -> bool:
     return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))

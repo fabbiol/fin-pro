@@ -12,9 +12,11 @@ COR_TRANSFERENCIAS = "155E75"
 
 FORMAS = {"pix": "Pix", "transferencia": "TED/DOC"}  # o que a Operações manda -> o que a tela mostra
 AGUARDANDO = "Aguardando pagamento"
-PAGO = "Pago"  # quando alguém liga um comprovante à nota (e, no próximo passo, pela leitura do extrato do banco)
+PAGO = "Pago"  # quando alguém liga um comprovante à nota, ou confirma um Pix recebido no Bradesco
 STATUS_TRANSFERENCIA = (AGUARDANDO, PAGO)
 ATIVO, DESFEITO = "Ativo", "Desfeito"  # um pagamento desfeito fica guardado, com o comprovante, só para o histórico
+# De onde veio o pagamento: comprovante enviado à mão, ou Pix confirmado a partir da consulta à API Pix do Bradesco
+ORIGEM_COMPROVANTE, ORIGEM_PIX = "Comprovante", "API Pix Bradesco"
 
 COLUNAS_TRANSFERENCIAS: list[Coluna] = [
     Coluna("id", "ID", 7, "0"),
@@ -37,7 +39,8 @@ COLUNAS_TRANSFERENCIAS: list[Coluna] = [
     Coluna("atualizado_em", "Atualizada em", 19, "dd/mm/yyyy hh:mm"),
 ]
 
-# Pagamento ligado à mão: um comprovante (Pix ou TED) que cobre uma ou mais notas
+# Pagamento ligado a uma ou mais notas: um comprovante (Pix ou TED) ou um ou mais Pix recebidos no Bradesco. Com vários
+# Pix, o ID da transação guarda os endToEndId separados por vírgula.
 COLUNAS_PAGAMENTOS: list[Coluna] = [
     Coluna("id", "Nº do Pagamento", 14, "0"),
     Coluna("notas", "Notas", 24, "@"),
@@ -46,6 +49,7 @@ COLUNAS_PAGAMENTOS: list[Coluna] = [
     Coluna("pagador", "Pagador", 30),
     Coluna("documento_pagador", "CNPJ/CPF do Pagador", 18, "@"),
     Coluna("id_transacao", "ID da Transação", 36, "@"),
+    Coluna("origem", "Origem", 18),
     Coluna("observacao", "Observação", 30),
     Coluna("status", "Situação", 12),
     Coluna("comprovante", "Comprovante", 28),
@@ -68,10 +72,10 @@ ABAS_TRANSFERENCIAS: dict[str, DefinicaoAba] = {
     ),
     "pagamentos": DefinicaoAba(
         "pagamentos", "Pagamentos", tuple(COLUNAS_PAGAMENTOS),
-        frozenset({"notas", "valor", "data_pagamento", "pagador", "documento_pagador", "id_transacao", "observacao",
-                   "status", "comprovante", "comprovante_nome", "desfeito_em", "desfeito_por"}),
-        "pagador", frozenset({"notas", "pagador", "documento_pagador", "id_transacao", "observacao", "comprovante",
-                              "comprovante_nome", "lancado_por", "desfeito_em", "desfeito_por"}),
+        frozenset({"notas", "valor", "data_pagamento", "pagador", "documento_pagador", "id_transacao", "origem",
+                   "observacao", "status", "comprovante", "comprovante_nome", "desfeito_em", "desfeito_por"}),
+        "pagador", frozenset({"notas", "pagador", "documento_pagador", "id_transacao", "origem", "observacao",
+                              "comprovante", "comprovante_nome", "lancado_por", "desfeito_em", "desfeito_por"}),
         COR_TRANSFERENCIAS, " (Pagamento de transferência)", (ATIVO, DESFEITO), "data_pagamento", ATIVO, DESFEITO,
     ),
 }

@@ -13,6 +13,16 @@ services:
       TZ: "America/Cuiaba"
       # Senha da integração com a Operações (aba Transferências de clientes).
       OPERACOES_TOKEN: ${OPERACOES_TOKEN:-}
+      # API Pix do Bradesco (Pix recebidos na aba Transferências de clientes). Os valores ficam no Ambiente do EasyPanel,
+      # nunca aqui. Sem eles, a consulta fica desligada e a tela explica o que falta.
+      BRADESCO_AMBIENTE: ${BRADESCO_AMBIENTE:-}  # sandbox (padrão) ou producao
+      BRADESCO_CLIENT_ID: ${BRADESCO_CLIENT_ID:-}
+      BRADESCO_CLIENT_SECRET: ${BRADESCO_CLIENT_SECRET:-}
+      # Certificado e chave: o texto de cada arquivo colado no Ambiente entre aspas simples (NOME='-----BEGIN ...').
+      BRADESCO_CERT: ${BRADESCO_CERT:-}
+      BRADESCO_KEY: ${BRADESCO_KEY:-}
+      BRADESCO_HOST: ${BRADESCO_HOST:-}
+      BRADESCO_TOKEN_PATH: ${BRADESCO_TOKEN_PATH:-}
     volumes:
       - /opt/finpro/dados:/app/dados
       # Pasta do backup total, fora da pasta de dados como o backup exige (na VPS: /opt/finpro/backup). O sistema
