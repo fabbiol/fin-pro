@@ -4,17 +4,24 @@ Mesmo caminho do projeto de referência em PHP: conexão com o certificado da em
 ``client_credentials`` (Basic com o Client ID e o Client Secret) e ``GET /v2/pix?inicio=&fim=`` (padrão do Banco Central),
 página por página. Começa no sandbox (``BRADESCO_AMBIENTE=sandbox``, o padrão); em produção, ``producao``.
 
+O certificado e a chave vêm do Ambiente do EasyPanel: ``BRADESCO_CERT`` e ``BRADESCO_KEY`` com o texto PEM colado (o
+EasyPanel pode juntar as linhas; o texto é arrumado aqui) ou com o caminho de um arquivo.
+
 Segurança: credenciais só nas variáveis de ambiente (nunca no código, na tela ou no log); o token fica só na memória;
-o Client Secret é tirado de qualquer mensagem de erro do banco antes de mostrar.
+o Client Secret é tirado de qualquer mensagem de erro do banco antes de mostrar; mensagem nenhuma repete o valor do
+certificado ou da chave; o texto colado só vai para um arquivo temporário (só o dono lê) enquanto o ssl o carrega.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
 import ssl
+import tempfile
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,6 +41,8 @@ TIMEOUT = httpx.Timeout(60, connect=20)
 _tokens: dict[tuple[str, str], tuple[str, float]] = {}  # (host, client id) -> (token, expira em)
 _lock = threading.Lock()
 _transporte: httpx.BaseTransport | None = None  # nos testes: o banco simulado (httpx.MockTransport)
+_PEM = re.compile(r"-----BEGIN ([A-Z0-9 ]+)-----(.*?)-----END \1-----", re.S)
+PEM_ESPERADO = {"cert": ("CERTIFICATE-----", "o certificado", "inteiro"), "key": ("PRIVATE KEY-----", "a chave", "inteira")}
 
 
 class ErroBradesco(RuntimeError):
@@ -46,9 +55,20 @@ class Configuracao:
     host: str
     token_path: str
     client_id: str
-    client_secret: str
-    cert: str
-    key: str
+    client_secret: str = field(repr=False)
+    cert: str = field(repr=False)  # texto PEM ou caminho do arquivo
+    key: str = field(repr=False)
+
+
+def pem(texto: str) -> str:
+    """O certificado ou a chave colados no Ambiente, de volta ao formato PEM. O EasyPanel pode juntar as linhas (ou
+    trocá-las por \\n): o que está entre o BEGIN e o END é refeito em linhas de 64 caracteres. Sem bloco, devolve ""."""
+    blocos = []
+    for tipo, corpo in _PEM.findall(texto.replace("\\n", "\n")):
+        corpo = re.sub(r"\s", "", corpo)
+        linhas = "".join(corpo[i:i + 64] + "\n" for i in range(0, len(corpo), 64))
+        blocos.append(f"-----BEGIN {tipo}-----\n{linhas}-----END {tipo}-----\n")
+    return "".join(blocos)
 
 
 def configuracao() -> tuple[Configuracao | None, str]:
@@ -60,14 +80,30 @@ def configuracao() -> tuple[Configuracao | None, str]:
     faltando = [f"BRADESCO_{nome.upper()}" for nome in ("client_id", "client_secret", "cert", "key") if not valores[nome]]
     if faltando:
         return None, f"Consulta ao Bradesco desligada: falta {', '.join(faltando)} no Ambiente do EasyPanel."
-    for nome in ("cert", "key"):
-        if not Path(valores[nome]).is_file():
-            return None, (f"Consulta ao Bradesco desligada: o arquivo de BRADESCO_{nome.upper()} ({valores[nome]}) não foi "
-                          "encontrado. Confira a pasta dos certificados na VPS (/opt/finpro/certs).")
+    for nome, (esperado, o_que, inteiro) in PEM_ESPERADO.items():
+        # o valor nunca entra na mensagem: pode ser a chave colada pela metade
+        if "-----BEGIN" in valores[nome]:
+            valores[nome] = pem(valores[nome])
+            if esperado not in valores[nome]:
+                return None, (f"Consulta ao Bradesco desligada: BRADESCO_{nome.upper()} não tem {o_que} {inteiro}. Cole o "
+                              "texto do arquivo todo, de -----BEGIN até -----END, entre aspas simples.")
+        elif not Path(valores[nome]).is_file():
+            return None, (f"Consulta ao Bradesco desligada: BRADESCO_{nome.upper()} deve ter {o_que} (o texto do arquivo, "
+                          "de -----BEGIN até -----END, entre aspas simples) ou o caminho de um arquivo que exista.")
     host, token_path = AMBIENTES[ambiente]
     host = re.sub(r"^https?://", "", valores["host"]).rstrip("/") or host
     return Configuracao(ambiente, host, valores["token_path"] or token_path, valores["client_id"],
                         valores["client_secret"], valores["cert"], valores["key"]), ""
+
+
+def _arquivo(pasta: str, nome: str, valor: str) -> str:
+    """O caminho para o ssl ler: o próprio valor, ou o texto PEM gravado na pasta temporária (só o dono lê)."""
+    if "-----BEGIN" not in valor:
+        return valor
+    caminho = os.path.join(pasta, nome)
+    with os.fdopen(os.open(caminho, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as arquivo:
+        arquivo.write(valor)
+    return caminho
 
 
 def _cliente(cfg: Configuracao) -> httpx.Client:
@@ -75,12 +111,19 @@ def _cliente(cfg: Configuracao) -> httpx.Client:
         return httpx.Client(base_url=f"https://{cfg.host}", transport=_transporte, timeout=TIMEOUT)
     contexto = ssl.create_default_context(cafile=certifi.where())
     contexto.minimum_version = ssl.TLSVersion.TLSv1_2
+    pasta = None
     try:
+        pasta = tempfile.mkdtemp(prefix="finpro-bradesco-")  # o ssl só lê de arquivo; a pasta some logo depois
         # chave com senha: dá erro em vez de o OpenSSL parar esperando alguém digitar a senha no terminal
-        contexto.load_cert_chain(cfg.cert, cfg.key, password=lambda: b"")
+        contexto.load_cert_chain(_arquivo(pasta, "cert.pem", cfg.cert), _arquivo(pasta, "key.pem", cfg.key),
+                                 password=lambda: b"")
     except (ssl.SSLError, OSError):
-        raise ErroBradesco("O certificado ou a chave do Bradesco não puderam ser lidos. Confira os arquivos de "
-                           "BRADESCO_CERT e BRADESCO_KEY (formato PEM, chave sem senha).") from None
+        raise ErroBradesco("O certificado ou a chave do Bradesco não puderam ser lidos. Confira BRADESCO_CERT e "
+                           "BRADESCO_KEY: o texto inteiro de cada arquivo, de -----BEGIN até -----END, e a chave sem "
+                           "senha.") from None
+    finally:
+        if pasta:
+            shutil.rmtree(pasta, ignore_errors=True)
     return httpx.Client(base_url=f"https://{cfg.host}", verify=contexto, timeout=TIMEOUT)
 
 

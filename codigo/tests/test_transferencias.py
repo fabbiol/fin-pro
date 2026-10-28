@@ -389,7 +389,10 @@ def test_ligar_so_com_login_e_permissao(sistema, tela):
 # --------------------------------------------------------------------------- Pix recebidos no Bradesco (banco simulado)
 
 import base64  # noqa: E402
+import os  # noqa: E402
+import ssl  # noqa: E402
 from datetime import date, datetime, timezone  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 import httpx  # noqa: E402
 
@@ -555,7 +558,8 @@ def test_sem_as_variaveis_a_consulta_fica_desligada_e_explica(sistema, tmp_path,
 
         _ligar_bradesco(monkeypatch, tmp_path, CERT=str(tmp_path / "nao-existe.crt"))
         motivo = computador.get("/api/transferencias/bradesco").json()["motivo"]
-        assert "BRADESCO_CERT" in motivo and "/opt/finpro/certs" in motivo and CLIENT_SECRET not in motivo
+        assert "BRADESCO_CERT" in motivo and "-----BEGIN" in motivo and CLIENT_SECRET not in motivo
+        assert "nao-existe.crt" not in motivo  # o valor da variável nunca entra na mensagem
 
         monkeypatch.setenv("BRADESCO_AMBIENTE", "homologacao")
         assert "BRADESCO_AMBIENTE" in computador.get("/api/transferencias/bradesco").json()["motivo"]
@@ -571,6 +575,54 @@ def test_certificado_que_nao_abre_explica_sem_mostrar_segredo(sistema, tmp_path,
         resposta = computador.post("/api/transferencias/bradesco/consultar", json={"inicio": "2024-10-02", "fim": "2024-10-03"})
     assert resposta.status_code == 502 and resposta.json()["detail"]["codigo"] == "bradesco_falhou"
     assert "certificado" in resposta.json()["detail"]["mensagem"] and CLIENT_SECRET not in resposta.text
+
+
+# Texto no formato PEM, só para os testes (não é um certificado nem uma chave de verdade)
+CORPO = "QUJD" * 40
+CERT_PEM = f"-----BEGIN CERTIFICATE-----\n{CORPO[:64]}\n{CORPO[64:128]}\n{CORPO[128:]}\n-----END CERTIFICATE-----\n"
+CHAVE_PEM = CERT_PEM.replace("CERTIFICATE", "PRIVATE KEY")
+
+
+@pytest.mark.parametrize("colado", [CERT_PEM, CERT_PEM.replace("\n", "\r\n"), CERT_PEM.replace("\n", " "),
+                                    CERT_PEM.replace("\n", ""), CERT_PEM.replace("\n", "\\n"), f"'{CERT_PEM}'",
+                                    f"Bag Attributes\n    localKeyID: 01\n{CERT_PEM}"])
+def test_texto_colado_no_easypanel_volta_ao_formato_pem(colado):
+    """O EasyPanel pode juntar as linhas, trocar por \\n ou deixar as aspas: o PEM é refeito do mesmo jeito."""
+    assert bradesco.pem(colado) == CERT_PEM
+    assert bradesco.pem(f"{CERT_PEM} {CERT_PEM}") == CERT_PEM * 2  # certificado com a cadeia
+    assert bradesco.pem("-----BEGIN CERTIFICATE----- sem o fim") == ""
+
+
+def test_certificado_e_chave_colados_no_ambiente(monkeypatch):
+    for nome in VARIAVEIS_BRADESCO:
+        monkeypatch.delenv(f"BRADESCO_{nome}", raising=False)
+    monkeypatch.setenv("BRADESCO_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("BRADESCO_CLIENT_SECRET", CLIENT_SECRET)
+    monkeypatch.setenv("BRADESCO_CERT", CERT_PEM.replace("\n", " "))  # o EasyPanel juntou as linhas
+    monkeypatch.setenv("BRADESCO_KEY", CHAVE_PEM)
+    cfg, motivo = bradesco.configuracao()
+    assert motivo == "" and (cfg.cert, cfg.key) == (CERT_PEM, CHAVE_PEM)
+    assert CORPO not in repr(cfg) and CLIENT_SECRET not in repr(cfg)
+
+    lidos = {}
+
+    def carregar(contexto, certfile, keyfile=None, password=None):
+        for nome, caminho in (("cert", certfile), ("key", keyfile)):
+            lidos[nome] = (Path(caminho).read_text(), Path(caminho).stat().st_mode & 0o777)
+        lidos["pasta"], lidos["senha"] = Path(certfile).parent, password()
+
+    monkeypatch.setattr(ssl.SSLContext, "load_cert_chain", carregar)
+    monkeypatch.setattr(bradesco, "_transporte", None)
+    bradesco._cliente(cfg).close()
+    assert (lidos["cert"][0], lidos["key"][0], lidos["senha"]) == (CERT_PEM, CHAVE_PEM, b"")
+    if os.name != "nt":  # no Windows não há permissão de arquivo nesse formato
+        assert lidos["cert"][1] == lidos["key"][1] == 0o600
+    assert not lidos["pasta"].exists()  # o arquivo temporário some logo depois de carregar
+
+    monkeypatch.setenv("BRADESCO_KEY", CHAVE_PEM[:60])  # colou pela metade
+    cfg, motivo = bradesco.configuracao()
+    assert cfg is None and "BRADESCO_KEY" in motivo and "a chave inteira" in motivo
+    assert CORPO[:20] not in motivo  # o que foi colado nunca aparece na tela
 
 
 def test_consulta_pede_o_token_uma_vez_e_le_todas_as_paginas(banco_pix):

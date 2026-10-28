@@ -711,15 +711,14 @@ produto à parte, contratado com o gerente).
 |---|---|
 | `BRADESCO_AMBIENTE` | `sandbox` (teste, o padrão) ou `producao` |
 | `BRADESCO_CLIENT_ID` e `BRADESCO_CLIENT_SECRET` | o par da credencial criada no portal do Bradesco para este certificado |
-| `BRADESCO_CERT` e `BRADESCO_KEY` | caminho, dentro do container, do certificado e da chave (PEM, chave sem senha), ex.: `/certs/producao.crt` e `/certs/client.key.pem` |
+| `BRADESCO_CERT` e `BRADESCO_KEY` | o certificado e a chave (PEM, chave sem senha): o texto inteiro de cada arquivo, de `-----BEGIN` até `-----END`, entre aspas simples (ou o caminho de um arquivo) |
 | `BRADESCO_HOST` e `BRADESCO_TOKEN_PATH` | opcionais: trocam o endereço e o caminho do token (sandbox: `openapisandbox.prebanco.com.br` e `/auth/server/oauth/token`; produção: `qrpix.bradesco.com.br` e `/v2/oauth/token`) |
 
-Os certificados ficam na VPS em `/opt/finpro/certs` (fora do Git), montada no container como `/certs` **somente
-leitura**. Para mandar o certificado e a chave do Windows para a VPS (também na renovação anual), ponha numa mesma pasta
-`ferramentas\enviar_certificados_bradesco.ps1`, o certificado, a chave e o `.env.production`, clique com o botão
-direito no script e escolha **Executar com o PowerShell**. Ele pede o IP e a senha do root (na própria janela), copia
-os arquivos, deixa só o root ler, confere se o certificado e a chave são um par e a validade, e copia para a área de
-transferência as linhas do Ambiente do EasyPanel. Faltando alguma variável ou arquivo, o cartão diz o que falta e o resto da tela continua funcionando. O token do
+Para colar o certificado: abra o arquivo no Bloco de Notas, copie tudo e, na aba Ambiente, escreva
+`BRADESCO_CERT='`, cole e feche com `'` (a mesma coisa com a chave em `BRADESCO_KEY`). O Docker aceita o texto em várias
+linhas entre aspas simples; se o EasyPanel juntar as linhas, o Fin Pro arruma sozinho. Na renovação anual do
+certificado, é só colar os textos novos e clicar em Implantar. Faltando alguma variável ou com o texto incompleto, o
+cartão diz o que falta (sem repetir o que foi colado) e o resto da tela continua funcionando. O token do
 banco fica só na memória e o Client Secret nunca aparece em tela nem no registro.
 
 **Como ligar:** o Fin Pro e a Operações precisam do **mesmo token** (uma senha longa, só para isso). No Fin Pro ele vai
