@@ -849,3 +849,49 @@ def test_bradesco_so_com_login_e_permissao(sistema, notas_e_pix):
             negado = getattr(celular, metodo)(rota, **({"json": corpo} if corpo else {}))
             assert negado.status_code == 403 and negado.json()["detail"]["permissao"] == "transferencias"
     assert _linhas(notas_e_pix)["100"]["status"] == "Aguardando pagamento"
+
+
+# --------------------------------------------------------------------------- nota paga em mais de uma forma
+
+PIX_E_CARTAO = '[{"forma": "pix", "valor": "1000.00"}, {"forma": "cartao", "valor": "905.60"}]'
+
+
+def test_nota_com_pix_e_cartao_espera_so_o_pix(operacoes):
+    assert _enviar(operacoes, pagamentos=PIX_E_CARTAO).status_code == 201
+    [registro] = contexto.transferencias.listar()
+    assert registro["formas"] == "Pix R$ 1.000,00 + Cartão R$ 905,60" and registro["valor_receber"] == 1000.0
+    assert registro["valor"] == 1905.6
+    assert _enviar(operacoes).status_code == 200  # reenvio já com uma forma só: volta a esperar a nota toda
+    [registro] = contexto.transferencias.listar()
+    assert registro["formas"] == "" and not registro["valor_receber"]
+
+
+@pytest.mark.parametrize("pagamentos, trecho", [
+    ('[{"forma": "pix", "valor": "1000.00"}, {"forma": "cartao", "valor": "900.00"}]', "não bate"),
+    ('[{"forma": "dinheiro", "valor": "1000.00"}, {"forma": "cartao", "valor": "905.60"}]', "Pix ou TED"),
+    ('[{"forma": "pix", "valor": "1000.00"}, {"forma": "pix", "valor": "905.60"}]', "duas vezes"),
+    ('[{"forma": "pix", "valor": "1905.60"}]', "de 2 a 4"),
+    ('[{"forma": "vale", "valor": "1000.00"}, {"forma": "pix", "valor": "905.60"}]', "desconhecida"),
+    ("pix e cartão", "lista JSON"),
+])
+def test_formas_de_pagamento_invalidas_recebem_422(operacoes, pagamentos, trecho):
+    resposta = _enviar(operacoes, pagamentos=pagamentos)
+    assert resposta.status_code == 422 and trecho in resposta.json()["erro"], resposta.json()
+    assert contexto.transferencias.listar() == []
+
+
+def test_conciliacao_procura_so_a_parte_em_pix():
+    nota = {**_n(1, 1905.60), "formas": "Pix R$ 1.000,00 + Cartão R$ 905,60", "valor_receber": 1000.0}
+    resultado = servico.conciliar([_p(0, 1000.00)], [nota], {})
+    assert _grupos(resultado) == [((0,), (1,))] and resultado["sugestoes"][0]["notas"][0]["valor_nota"] == 1905.6
+
+
+def test_comprovante_do_cartao_fica_guardado_na_nota(tela):
+    assert _enviar(tela, origem_id="9", nota="900", pagamentos=PIX_E_CARTAO).status_code == 201
+    nota = _linhas(tela)["900"]
+    assert tela.get(f"/api/transferencias/{nota['id']}/cartao").status_code == 404
+    resposta = tela.post(f"/api/transferencias/{nota['id']}/cartao", files={"arquivo": ("cartao.pdf", _pdf_texto("Cartao de credito"), "application/pdf")})
+    assert resposta.status_code == 200, resposta.text
+    nota = _linhas(tela)["900"]
+    assert nota["comprovante_cartao_nome"] == "cartao.pdf" and nota["status"] == "Aguardando pagamento"
+    assert tela.get(f"/api/transferencias/{nota['id']}/cartao").status_code == 200

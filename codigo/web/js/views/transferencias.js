@@ -29,7 +29,9 @@ const documentoBR = (d) => {
   const t = documentoLimpo(d);
   return /[A-Z]/.test(t) ? t.replace(/^(\w{2})(\w{3})(\w{3})(\w{4})(\d{2})$/, "$1.$2.$3/$4-$5") : t ? mascarar("cpf_cnpj", t) : "";
 };
-const somaDe = (notas) => Math.round(notas.reduce((s, t) => s + Number(t.valor || 0), 0) * 100) / 100;
+// Nota paga em mais de uma forma: só a parte em Pix/TED espera o comprovante.
+const aReceber = (t) => Number(t.valor_receber || t.valor || 0);
+const somaDe = (notas) => Math.round(notas.reduce((s, t) => s + aReceber(t), 0) * 100) / 100;
 const liquido = (p) => Math.round((Number(p.valor) - Number(p.devolvido || 0)) * 100) / 100; // o que sobrou depois das devoluções
 const somaPix = (pix) => Math.round(pix.reduce((s, p) => s + liquido(p), 0) * 100) / 100;
 
@@ -115,6 +117,8 @@ async function aoClicar(e) {
     desenharTabela(linhasAtuais);
     desenharLote();
     desenharBradesco();
+  } else if (acao === "cartao") {
+    enviarCartao(botao);
   } else if (acao === "ligar") {
     abrirLigar([...selecionadas.values()]);
   } else if (acao === "ligar-pix") {
@@ -204,6 +208,34 @@ function celulaSituacao(t) {
   return `<td data-rotulo="Situação" class="lp-situacao"><span class="chip ${CLASSE_SITUACAO[t.status] || ""}"${titulo}>${esc(t.status)}</span>${detalhe}</td>`;
 }
 
+// Foto do comprovante da parte paga no cartão: opcional, só para consulta.
+function celulaCartao(t) {
+  if (!/Cartão/.test(t.formas || "")) return "";
+  return `<small class="por-quem">${t.comprovante_cartao
+    ? `<a href="/api/transferencias/${t.id}/cartao" target="_blank" rel="noopener">${icone("clipe", 12)} Comprovante do cartão</a> ·
+       <button type="button" class="btn btn-sm btn-fantasma" data-acao="cartao" data-id="${t.id}">trocar</button>`
+    : `<button type="button" class="btn btn-sm btn-fantasma" data-acao="cartao" data-id="${t.id}">${icone("clipe", 12)} Anexar comprovante do cartão</button>`}</small>`;
+}
+
+function enviarCartao(botao) {
+  const entrada = Object.assign(document.createElement("input"), { type: "file", accept: "application/pdf,image/*,.heic,.heif" });
+  entrada.addEventListener("change", async () => {
+    const arquivo = entrada.files?.[0];
+    if (!arquivo) return;
+    botao.disabled = true;
+    try {
+      await api.enviarPara(`/api/transferencias/${botao.dataset.id}/cartao`, arquivo);
+      toast("Comprovante do cartão guardado.", "ok");
+      await carregar();
+    } catch (erro) {
+      toast(mensagemErro(erro), "erro");
+    } finally {
+      botao.disabled = false;
+    }
+  });
+  entrada.click();
+}
+
 function celulaAcoes(t) {
   const p = t.pagamento;
   if (!p) {
@@ -243,10 +275,11 @@ function desenharTabela(linhas) {
       <td data-rotulo="Pedido">${esc(t.pedido || "—")}</td>
       <td data-rotulo="Cliente" class="celula-benef"><strong title="${esc(t.empresa)}">${esc(t.empresa)}</strong>${t.documento
         ? `<span class="mono">${esc(documentoBR(t.documento))}</span>` : ""}</td>
-      <td class="num" data-rotulo="Valor">${brl(t.valor)}</td>
+      <td class="num" data-rotulo="Valor">${brl(t.valor)}${t.valor_receber
+        ? `<small class="por-quem" title="Só a parte em Pix ou TED/DOC espera o comprovante">A receber ${brl(t.valor_receber)}</small>` : ""}</td>
       <td data-rotulo="Material">${esc(t.material || "—")}</td>
       <td data-rotulo="Emissão">${dataBR(t.emitida_em)}</td>
-      <td data-rotulo="Forma">${esc(FORMAS[t.forma] || t.forma)}</td>
+      <td data-rotulo="Forma">${t.formas ? esc(t.formas) : esc(FORMAS[t.forma] || t.forma)}${celulaCartao(t)}</td>
       ${celulaSituacao(t)}
       ${celulaAcoes(t)}</tr>`).join("")}</tbody>
   </table>`;
@@ -264,7 +297,7 @@ function abrirLigar(notas) {
     tamanho: "lg",
     corpo: `
       <ul class="lp-notas">${notas.map((t) => `<li><strong>Nota ${esc(t.nota)}</strong>
-        <span class="sutil">${esc(t.empresa)}${t.documento ? ` · ${esc(documentoBR(t.documento))}` : ""}</span><span class="num">${brl(t.valor)}</span></li>`).join("")}
+        <span class="sutil">${esc(t.empresa)}${t.documento ? ` · ${esc(documentoBR(t.documento))}` : ""}${t.valor_receber ? ` · ${esc(t.formas)}` : ""}</span><span class="num">${brl(aReceber(t))}</span></li>`).join("")}
         <li class="lp-soma"><strong>Soma das notas</strong><span></span><span class="num">${brl(soma)}</span></li></ul>
       <div class="det-comprovante" data-lp-envio></div>
       <input type="file" accept="application/pdf,image/*,.heic,.heif" data-lp-arquivo hidden>

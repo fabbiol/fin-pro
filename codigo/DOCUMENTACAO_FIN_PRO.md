@@ -674,6 +674,11 @@ sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, sep
   nota paga precisa ter o pagamento desfeito antes. A exclusão fica registrada no Histórico, e se a Operações mandar a
   mesma nota de novo, ela volta como nota nova.
 - Quem vê e mexe na tela: quem tem a permissão **Transferências** (o administrador já tem).
+- **Nota paga em mais de uma forma** (por exemplo, Pix R$ 1.000,00 + Cartão R$ 905,60): chega quando alguma parte é
+  Pix ou TED/DOC. A coluna Forma mostra todas as partes, e o Valor mostra **A receber** com só a parte em Pix ou TED/DOC.
+  É esse valor que espera o comprovante e que a consulta ao Bradesco procura. A nota vira **Pago** quando essa parte é
+  paga. Se uma das partes for no cartão, toque em **Anexar comprovante do cartão** para guardar a foto: ela fica só para
+  consulta e não muda a situação da nota.
 
 **Ligar o pagamento:** quem paga por transferência nem sempre é a pessoa da nota. Então o pagamento é ligado à mão:
 
