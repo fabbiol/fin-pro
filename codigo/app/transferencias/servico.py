@@ -2,6 +2,9 @@
 
 * Cada nota vem com o número da ordem na Operações (``origem_id``). Se a mesma ordem chegar de novo (reenvio, nota
   corrigida), a linha existente é **atualizada** — nunca duplica, e a situação e o pagamento não mudam.
+* Nota paga em mais de uma forma (Pix + cartão...): chegam as partes (``pagamentos``). Fica esperando o comprovante só
+  o que veio por Pix ou TED/DOC (``valor_receber``), e é esse valor que a conciliação com o Bradesco procura. A parte
+  do cartão pode ter a foto do comprovante, só para consulta.
 * Toda nota nova entra como **Aguardando pagamento**. Vira **Pago** quando alguém liga um comprovante (Pix/TED) a ela,
   ou confirma um Pix recebido no Bradesco (API Pix): um pagamento pode cobrir várias notas e juntar vários Pix.
   Desfazer o pagamento volta as notas; o pagamento fica guardado como desfeito.
@@ -11,6 +14,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import threading
 import unicodedata
@@ -21,8 +25,10 @@ from .. import comprovante
 from .. import contexto as ctx
 from ..arquivos import RepositorioArquivos
 from ..boleto.extrator import ler_arquivo
+from ..caixa.servico import moeda
 from . import bradesco
-from .modelos import AGUARDANDO, ATIVO, DESFEITO, FORMAS, ORIGEM_COMPROVANTE, ORIGEM_PIX, PAGO, STATUS_TRANSFERENCIA
+from .modelos import (AGUARDANDO, ATIVO, DESFEITO, FORMAS, FORMAS_OPERACOES, MAX_FORMAS, ORIGEM_COMPROVANTE, ORIGEM_PIX,
+                      PAGO, STATUS_TRANSFERENCIA)
 
 MAX_PDF = 10 * 1024 * 1024
 USUARIO = "Operações"  # quem aparece como "Enviada por" e no Histórico
@@ -83,10 +89,54 @@ def validar(campos) -> dict:
     chave = re.sub(r"\s", "", str(campos.get("chave") or ""))
     if chave and not re.fullmatch(r"\d{44}", chave):
         raise ErroTransferencia("chave deve ter 44 dígitos.")
-    return {"origem_id": int(origem), "nota": _texto(campos, "nota", 30, True), "pedido": _texto(campos, "pedido", 30),
+    partes = _partes(campos.get("pagamentos"), float(valor) if valor else None)
+    return {**_formas(partes), "origem_id": int(origem), "nota": _texto(campos, "nota", 30, True), "pedido": _texto(campos, "pedido", 30),
             "empresa": _texto(campos, "empresa", 120, True), "documento": documento(campos.get("documento")),
             "valor": float(valor) if valor else None, "material": _texto(campos, "material", 120), "emitida_em": emitida,
             "forma": forma, "chave": chave}
+
+
+def _partes(bruto, valor: float | None) -> list[tuple[str, float]]:
+    """As partes da nota paga em mais de uma forma: JSON ``[{"forma": "pix", "valor": "1000.00"}, ...]``. Vazio: uma forma só."""
+    texto = str(bruto or "").strip()
+    if not texto:
+        return []
+    try:
+        lista = json.loads(texto)
+    except ValueError:
+        lista = None
+    if not isinstance(lista, list) or not all(isinstance(item, dict) for item in lista):
+        raise ErroTransferencia('pagamentos deve ser uma lista JSON, ex.: [{"forma": "pix", "valor": "1000.00"}].')
+    if not 2 <= len(lista) <= MAX_FORMAS:
+        raise ErroTransferencia(f"pagamentos deve ter de 2 a {MAX_FORMAS} formas.")
+    partes = []
+    for item in lista:
+        forma, quanto = str(item.get("forma") or "").strip(), str(item.get("valor") or "").strip()
+        if forma not in FORMAS_OPERACOES:
+            raise ErroTransferencia(f"Forma de pagamento desconhecida: {forma or '(vazia)'}.")
+        if not re.fullmatch(r"\d{1,12}(\.\d{1,2})?", quanto) or float(quanto) <= 0:
+            raise ErroTransferencia("O valor de cada forma de pagamento deve ser um número maior que zero, ex.: 1000.00.")
+        partes.append((forma, float(quanto)))
+    if len({forma for forma, _ in partes}) != len(partes):
+        raise ErroTransferencia("A mesma forma de pagamento aparece duas vezes.")
+    if not any(forma in FORMAS for forma, _ in partes):
+        raise ErroTransferencia("A nota precisa de alguma parte em Pix ou TED/DOC.")
+    if valor is not None and round(sum(quanto for _, quanto in partes), 2) != round(valor, 2):
+        raise ErroTransferencia("A soma das formas de pagamento não bate com o valor da nota.")
+    return partes
+
+
+def _formas(partes: list[tuple[str, float]]) -> dict:
+    """O texto das partes e o que vem por Pix ou TED/DOC. Nota de uma forma só: os dois vazios (vale o valor da nota)."""
+    if not partes:
+        return {"formas": "", "valor_receber": None}
+    return {"formas": " + ".join(f"{FORMAS_OPERACOES[forma]} {moeda(quanto)}" for forma, quanto in partes),
+            "valor_receber": round(sum(quanto for forma, quanto in partes if forma in FORMAS), 2)}
+
+
+def a_receber(registro: dict):
+    """Quanto da nota espera comprovante: a parte em Pix/TED da nota de várias formas, ou o valor da nota."""
+    return registro.get("valor_receber") or registro.get("valor")
 
 
 def validar_pdf(conteudo: bytes) -> None:
@@ -272,6 +322,18 @@ def desfazer(pagamento_id: int, usuario: str) -> tuple[dict, list[dict]]:
     return _publico(resultados[0]["registro"], [r["nota"] for r in notas]), [r["registro"] for r in resultados[1:]]
 
 
+def anexar_cartao(id_: int, dados: bytes, nome: str, usuario: str) -> dict:
+    """Guarda a foto do comprovante da parte paga no cartão (troca a que já havia). Não muda a situação da nota."""
+    registro = ctx.transferencias.obter(id_)
+    meta = ctx.arquivos.salvar(dados, nome or f"Cartão NF {registro['nota']}")
+    anterior = RepositorioArquivos.id_de_caminho(registro.get("comprovante_cartao"))
+    atualizado = ctx.transferencias.atualizar(id_, {"comprovante_cartao": ctx.arquivos.caminho_relativo(meta["id"]),
+                                                    "comprovante_cartao_nome": meta["nome"]}, usuario=usuario)
+    if anterior:
+        ctx.arquivos.remover(anterior)
+    return atualizado
+
+
 def comprovante_do_pagamento(pagamento_id: int) -> str | None:
     """Id do arquivo do comprovante (também de pagamento desfeito, que fica no histórico)."""
     pagamento = next((p for p in ctx.transferencias.listar("pagamentos") if p["id"] == pagamento_id), None)
@@ -298,8 +360,10 @@ def _liquido(pix: dict) -> float:
 
 
 def _nota_publica(r: dict) -> dict:
+    # "valor" é o que o Pix tem de pagar: na nota de várias formas, só a parte em Pix/TED.
     return {"id": r["id"], "nota": r.get("nota") or "", "empresa": r.get("empresa") or "", "documento": r.get("documento") or "",
-            "valor": r.get("valor"), "emitida_em": r.get("emitida_em") or "", "forma": r.get("forma") or ""}
+            "valor": a_receber(r), "valor_nota": r.get("valor"), "formas": r.get("formas") or "",
+            "emitida_em": r.get("emitida_em") or "", "forma": r.get("forma") or ""}
 
 
 def _combinacoes(itens: list[dict], alvo: int, valor) -> list[tuple]:

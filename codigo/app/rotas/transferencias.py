@@ -105,6 +105,31 @@ def abrir_pdf(id_: int):
                         content_disposition_type="inline")
 
 
+@router.post("/api/transferencias/{id_}/cartao")
+def anexar_cartao(id_: int, request: Request, arquivo: Upload = File(...)):
+    """Foto do comprovante da parte paga no cartão (opcional, só para consulta: não muda a situação da nota)."""
+    dados = ler_upload(arquivo)
+    validar_comprovante(dados)
+    try:
+        registro = servico.anexar_cartao(id_, dados, arquivo.filename or "", autor(request))
+    except RegistroNaoEncontrado:
+        raise erro(404, "nao_encontrado", "Transferência não encontrada.") from None
+    log.info("Comprovante do cartão anexado à nota %s (%s)", registro["nota"], autor(request))
+    return registro
+
+
+@router.get("/api/transferencias/{id_}/cartao")
+def abrir_cartao(id_: int):
+    try:
+        registro = ctx.transferencias.obter(id_)
+    except RegistroNaoEncontrado:
+        raise erro(404, "nao_encontrado", "Transferência não encontrada.") from None
+    arquivo_id = RepositorioArquivos.id_de_caminho(registro.get("comprovante_cartao"))
+    if not arquivo_id:
+        raise erro(404, "sem_comprovante", "Esta nota ainda não tem o comprovante do cartão.")
+    return visualizar_arquivo(arquivo_id)
+
+
 # --------------------------------------------------------------------------- ligar o pagamento à nota
 
 

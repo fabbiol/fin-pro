@@ -11,6 +11,10 @@ from ..planilha import Coluna, DefinicaoAba
 COR_TRANSFERENCIAS = "155E75"
 
 FORMAS = {"pix": "Pix", "transferencia": "TED/DOC"}  # o que a Operações manda -> o que a tela mostra
+# Nota paga em mais de uma forma (Pix + cartão, dinheiro + Pix...): todas as formas que a Operações conhece.
+FORMAS_OPERACOES = {"pix": "Pix", "transferencia": "TED/DOC", "dinheiro": "Dinheiro", "cartao": "Cartão",
+                    "cheque": "Cheque", "boleto": "Boleto", "prazo": "A prazo"}
+MAX_FORMAS = 4
 AGUARDANDO = "Aguardando pagamento"
 PAGO = "Pago"  # quando alguém liga um comprovante à nota, ou confirma um Pix recebido no Bradesco
 STATUS_TRANSFERENCIA = (AGUARDANDO, PAGO)
@@ -29,11 +33,17 @@ COLUNAS_TRANSFERENCIAS: list[Coluna] = [
     Coluna("material", "Material", 24),
     Coluna("emitida_em", "Emitida em", 19, "@"),
     Coluna("forma", "Forma", 14),
+    # Nota paga em mais de uma forma: as partes ("Pix R$ 1.000,00 + Cartão R$ 905,60") e quanto vem por Pix ou TED/DOC
+    # (é esse valor que espera o comprovante e que a conciliação com o Bradesco procura).
+    Coluna("formas", "Formas de Pagamento", 36),
+    Coluna("valor_receber", "A Receber em Pix/TED (R$)", 15, '"R$" #,##0.00'),
     Coluna("chave", "Chave de Acesso", 48, "@"),
     Coluna("status", "Situação", 22),
     Coluna("pagamento_id", "Nº do Pagamento", 14, "0"),
     Coluna("arquivo", "PDF da Nota", 28),
     Coluna("arquivo_nome", "Nome do PDF", 30),
+    Coluna("comprovante_cartao", "Comprovante do Cartão", 28),  # foto opcional da parte paga no cartão
+    Coluna("comprovante_cartao_nome", "Nome do Comprovante do Cartão", 30),
     Coluna("data_lancamento", "Recebida em", 19, "dd/mm/yyyy hh:mm"),
     Coluna("lancado_por", "Enviada por", 20),
     Coluna("atualizado_em", "Atualizada em", 19, "dd/mm/yyyy hh:mm"),
@@ -65,9 +75,11 @@ ABAS_TRANSFERENCIAS: dict[str, DefinicaoAba] = {
     "transferencias": DefinicaoAba(
         "transferencias", "Transferências", tuple(COLUNAS_TRANSFERENCIAS),
         frozenset({"origem_id", "nota", "pedido", "empresa", "documento", "valor", "material", "emitida_em", "forma",
-                   "chave", "status", "pagamento_id", "arquivo", "arquivo_nome"}),
-        "empresa", frozenset({"nota", "pedido", "empresa", "documento", "material", "emitida_em", "forma", "chave",
-                              "arquivo", "arquivo_nome", "lancado_por"}),
+                   "formas", "valor_receber", "chave", "status", "pagamento_id", "arquivo", "arquivo_nome",
+                   "comprovante_cartao", "comprovante_cartao_nome"}),
+        "empresa", frozenset({"nota", "pedido", "empresa", "documento", "material", "emitida_em", "forma", "formas",
+                              "chave", "arquivo", "arquivo_nome", "comprovante_cartao", "comprovante_cartao_nome",
+                              "lancado_por"}),
         COR_TRANSFERENCIAS, " (Transferência)", STATUS_TRANSFERENCIA, "", PAGO, "",
     ),
     "pagamentos": DefinicaoAba(
