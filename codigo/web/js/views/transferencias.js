@@ -8,7 +8,8 @@ import { mascarar } from "./pix/chaves.js";
 
 const FORMAS = { pix: "Pix", transferencia: "TED/DOC" };
 const AGUARDANDO = "Aguardando pagamento";
-const CLASSE_SITUACAO = { [AGUARDANDO]: "aviso", Pago: "ok" };
+// "A prazo" e "Atrasada": nota paga depois (prefeitura), com o dia previsto do pagamento.
+const CLASSE_SITUACAO = { [AGUARDANDO]: "aviso", "A prazo": "info", Atrasada: "erro", Pago: "ok" };
 const ROTA_PAGAMENTOS = "/api/transferencias/pagamentos";
 const ROTA_BRADESCO = "/api/transferencias/bradesco";
 const ORIGEM_PIX = "API Pix Bradesco";
@@ -158,7 +159,8 @@ async function carregar() {
     preencherOpcoes("#t-situacao", dados.situacoes, filtros.situacao);
     raiz.querySelector("#t-resumo").innerHTML = `
       <div class="card resumo-item"><span>Notas</span><strong>${dados.total}</strong></div>
-      <div class="card resumo-item"><span>Valor somado</span><strong>${brl(dados.valor)}</strong></div>`;
+      <div class="card resumo-item"><span>Valor somado</span><strong>${brl(dados.valor)}</strong></div>
+      ${dados.atrasadas ? `<div class="card resumo-item"><span>Atrasadas (passou o dia previsto)</span><strong><span class="chip erro">${dados.atrasadas}</span></strong></div>` : ""}`;
     linhasAtuais = dados.transferencias;
     // a seleção fica só com as notas que ainda estão na lista e aguardando pagamento
     const marcadas = new Set(selecionadas.keys());
@@ -205,7 +207,9 @@ function celulaSituacao(t) {
        ${outras.length ? `<small class="por-quem">Junto com ${outras.length === 1 ? "a nota" : "as notas"} ${esc(outras.join(", "))}</small>` : ""}`
     : "";
   const titulo = p ? ` title="Ligado por ${esc(p.ligado_por || "—")} em ${esc(dataHoraBR(p.ligado_em))}"` : "";
-  return `<td data-rotulo="Situação" class="lp-situacao"><span class="chip ${CLASSE_SITUACAO[t.status] || ""}"${titulo}>${esc(t.status)}</span>${detalhe}</td>`;
+  const situacao = t.situacao || t.status;
+  const previsto = t.previsto && t.status === AGUARDANDO ? `<small class="por-quem">Previsto para ${dataBR(t.previsto)}</small>` : "";
+  return `<td data-rotulo="Situação" class="lp-situacao"><span class="chip ${CLASSE_SITUACAO[situacao] || ""}"${titulo}>${esc(situacao)}</span>${previsto}${detalhe}</td>`;
 }
 
 // Foto do comprovante da parte paga no cartão: opcional, só para consulta.

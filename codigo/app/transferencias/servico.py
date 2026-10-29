@@ -5,6 +5,9 @@
 * Nota paga em mais de uma forma (Pix + cartão...): chegam as partes (``pagamentos``). Fica esperando o comprovante só
   o que veio por Pix ou TED/DOC (``valor_receber``), e é esse valor que a conciliação com o Bradesco procura. A parte
   do cartão pode ter a foto do comprovante, só para consulta.
+* Venda paga depois (prefeitura: TED em 15 ou 30 dias): chega o dia previsto (``previsto``). Até lá a nota aparece
+  como **A prazo**, separada das que deveriam ter sido pagas na hora; passado o dia sem pagamento, **Atrasada**.
+  A situação gravada continua Aguardando pagamento (a conciliação e o "Ligar pagamento" não mudam).
 * Toda nota nova entra como **Aguardando pagamento**. Vira **Pago** quando alguém liga um comprovante (Pix/TED) a ela,
   ou confirma um Pix recebido no Bradesco (API Pix): um pagamento pode cobrir várias notas e juntar vários Pix.
   Desfazer o pagamento volta as notas; o pagamento fica guardado como desfeito.
@@ -30,7 +33,7 @@ from ..boleto.extrator import ler_arquivo
 from ..caixa.servico import moeda
 from . import bradesco
 from .modelos import (AGUARDANDO, ATIVO, DESFEITO, FORMAS, FORMAS_OPERACOES, MAX_FORMAS, ORIGEM_COMPROVANTE, ORIGEM_PIX,
-                      PAGO, STATUS_TRANSFERENCIA)
+                      PAGO)
 
 MAX_PDF = 10 * 1024 * 1024
 USUARIO = "Operações"  # quem aparece como "Enviada por" e no Histórico
@@ -91,8 +94,16 @@ def validar(campos) -> dict:
     chave = re.sub(r"\s", "", str(campos.get("chave") or ""))
     if chave and not re.fullmatch(r"\d{44}", chave):
         raise ErroTransferencia("chave deve ter 44 dígitos.")
+    previsto = str(campos.get("previsto") or "").strip()
+    if previsto:
+        try:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", previsto):
+                raise ValueError
+            date.fromisoformat(previsto)
+        except ValueError:
+            raise ErroTransferencia("previsto deve ser AAAA-MM-DD.") from None
     partes = _partes(campos.get("pagamentos"), float(valor) if valor else None)
-    return {**_formas(partes), "origem_id": int(origem), "nota": _texto(campos, "nota", 30, True), "pedido": _texto(campos, "pedido", 30),
+    return {**_formas(partes), "previsto": previsto, "origem_id": int(origem), "nota": _texto(campos, "nota", 30, True), "pedido": _texto(campos, "pedido", 30),
             "empresa": _texto(campos, "empresa", 120, True), "documento": documento(campos.get("documento")),
             "valor": float(valor) if valor else None, "material": _texto(campos, "material", 120), "emitida_em": emitida,
             "forma": forma, "chave": chave}
@@ -203,6 +214,17 @@ def _publico(pagamento: dict, notas: list[str]) -> dict:
             "desfeito": pagamento.get("status") == DESFEITO}
 
 
+A_PRAZO, ATRASADA = "A prazo", "Atrasada"  # só na tela: a situação gravada continua Aguardando pagamento
+
+
+def situacao_na_tela(r: dict, hoje: date) -> str:
+    """A nota que aguarda pagamento com dia previsto: A prazo até o dia, Atrasada depois dele."""
+    previsto = r.get("previsto") or ""
+    if r.get("status") != AGUARDANDO or not previsto:
+        return r.get("status") or ""
+    return ATRASADA if previsto < hoje.isoformat() else A_PRAZO
+
+
 def listar(empresa: str = "", situacao: str = "", busca: str = "") -> dict:
     """Linhas da tela, das mais novas para as mais antigas, com os filtros de empresa, situação e busca pela nota."""
     todas = ctx.transferencias.listar()
@@ -212,17 +234,19 @@ def listar(empresa: str = "", situacao: str = "", busca: str = "") -> dict:
             notas_por_pagamento.setdefault(r["pagamento_id"], []).append(r["nota"])
     pagamentos = {p["id"]: _publico(p, notas_por_pagamento.get(p["id"], []))
                   for p in ctx.transferencias.listar("pagamentos") if p["id"] in notas_por_pagamento}
-    linhas = [{**r, "pagamento": pagamentos.get(r.get("pagamento_id"))} for r in todas]
+    hoje = date.today()
+    linhas = [{**r, "pagamento": pagamentos.get(r.get("pagamento_id")), "situacao": situacao_na_tela(r, hoje)} for r in todas]
+    atrasadas = sum(1 for r in linhas if r["situacao"] == ATRASADA)
     if empresa:
         linhas = [r for r in linhas if _normalizar(r.get("empresa")) == _normalizar(empresa)]
     if situacao:
-        linhas = [r for r in linhas if r.get("status") == situacao]
+        linhas = [r for r in linhas if r["situacao"] == situacao]
     if busca.strip():
         linhas = [r for r in linhas if _normalizar(busca) in _normalizar(r.get("nota"))]
     linhas.sort(key=lambda r: (r.get("emitida_em") or "", r["id"]), reverse=True)
     return {"transferencias": linhas, "total": len(linhas), "valor": round(sum(r.get("valor") or 0 for r in linhas), 2),
             "empresas": sorted({r["empresa"] for r in todas if r.get("empresa")}, key=_normalizar),
-            "situacoes": list(STATUS_TRANSFERENCIA), "formas": FORMAS}
+            "situacoes": [AGUARDANDO, A_PRAZO, ATRASADA, PAGO], "atrasadas": atrasadas, "formas": FORMAS}
 
 
 # --------------------------------------------------------------------------- ligar o pagamento à nota

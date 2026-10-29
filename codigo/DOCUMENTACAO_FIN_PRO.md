@@ -679,6 +679,11 @@ sozinha para o Fin Pro. Ela aparece no menu **Transferências de clientes**, sep
   É esse valor que espera o comprovante e que a consulta ao Bradesco procura. A nota vira **Pago** quando essa parte é
   paga. Se uma das partes for no cartão, toque em **Anexar comprovante do cartão** para guardar a foto: ela fica só para
   consulta e não muda a situação da nota.
+- **Venda paga depois** (por exemplo, a prefeitura, que paga por TED em 15 ou 30 dias): a Operações manda o dia previsto
+  do pagamento. Até esse dia a nota aparece como **A prazo**, separada das que deveriam ter sido pagas na hora (filtro
+  de situação "A prazo"). Passado o dia sem pagamento, aparece como **Atrasada**, em vermelho, e o alto da tela mostra
+  quantas estão atrasadas. Para ligar o pagamento e para a consulta ao Bradesco, ela continua sendo uma nota aguardando
+  pagamento.
 
 **Ligar o pagamento:** quem paga por transferência nem sempre é a pessoa da nota. Então o pagamento é ligado à mão:
 

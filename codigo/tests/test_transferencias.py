@@ -154,7 +154,7 @@ def test_lista_com_filtros_e_busca_pela_nota(sistema):
 
         tudo = computador.get("/api/transferencias").json()
         assert tudo["total"] == 3 and tudo["empresas"] == ["Construtora Sol", "Imapal"]
-        assert tudo["situacoes"] == ["Aguardando pagamento", "Pago"]
+        assert tudo["situacoes"] == ["Aguardando pagamento", "A prazo", "Atrasada", "Pago"]
 
         def notas(**params):
             return [t["nota"] for t in computador.get("/api/transferencias", params=params).json()["transferencias"]]
@@ -895,3 +895,35 @@ def test_comprovante_do_cartao_fica_guardado_na_nota(tela):
     nota = _linhas(tela)["900"]
     assert nota["comprovante_cartao_nome"] == "cartao.pdf" and nota["status"] == "Aguardando pagamento"
     assert tela.get(f"/api/transferencias/{nota['id']}/cartao").status_code == 200
+
+
+# --------------------------------------------------------------------------- venda paga depois (prefeitura)
+
+
+def test_venda_a_prazo_fica_separada_e_avisa_quando_atrasa(sistema):
+    from datetime import date, timedelta
+    with TestClient(main.app) as computador:
+        _enviar(computador, origem_id="1", nota="100")
+        _enviar(computador, origem_id="2", nota="200", forma="transferencia", previsto=(date.today() + timedelta(days=15)).isoformat())
+        _enviar(computador, origem_id="3", nota="300", forma="transferencia", previsto=(date.today() - timedelta(days=1)).isoformat())
+        _enviar(computador, origem_id="4", nota="400", forma="transferencia", previsto=date.today().isoformat())
+
+        def notas(**params):
+            return sorted(t["nota"] for t in computador.get("/api/transferencias", params=params).json()["transferencias"])
+
+        assert notas(situacao="Aguardando pagamento") == ["100"]
+        assert notas(situacao="A prazo") == ["200", "400"]  # no dia previsto ainda não está atrasada
+        assert notas(situacao="Atrasada") == ["300"]
+        assert computador.get("/api/transferencias").json()["atrasadas"] == 1
+        [registro] = [r for r in contexto.transferencias.listar() if r["nota"] == "300"]
+        assert registro["status"] == "Aguardando pagamento"  # a situação gravada não muda: a conciliação continua achando a nota
+
+        contexto.transferencias.atualizar(registro["id"], {"status": "Pago"})
+        assert notas(situacao="Pago") == ["300"] and computador.get("/api/transferencias").json()["atrasadas"] == 0
+
+
+@pytest.mark.parametrize("previsto", ["13/11/2026", "2026-02-30", "amanhã"])
+def test_pagamento_previsto_invalido_recebe_422(operacoes, previsto):
+    resposta = _enviar(operacoes, previsto=previsto)
+    assert resposta.status_code == 422 and "previsto" in resposta.json()["erro"], resposta.json()
+    assert contexto.transferencias.listar() == []

@@ -33,6 +33,8 @@ COLUNAS_TRANSFERENCIAS: list[Coluna] = [
     Coluna("material", "Material", 24),
     Coluna("emitida_em", "Emitida em", 19, "@"),
     Coluna("forma", "Forma", 14),
+    # Venda paga depois (prefeitura: TED em 15 ou 30 dias): o dia em que o pagamento é esperado (AAAA-MM-DD).
+    Coluna("previsto", "Pagamento Previsto", 12, "@"),
     # Nota paga em mais de uma forma: as partes ("Pix R$ 1.000,00 + Cartão R$ 905,60") e quanto vem por Pix ou TED/DOC
     # (é esse valor que espera o comprovante e que a conciliação com o Bradesco procura).
     Coluna("formas", "Formas de Pagamento", 36),
@@ -75,9 +77,9 @@ ABAS_TRANSFERENCIAS: dict[str, DefinicaoAba] = {
     "transferencias": DefinicaoAba(
         "transferencias", "Transferências", tuple(COLUNAS_TRANSFERENCIAS),
         frozenset({"origem_id", "nota", "pedido", "empresa", "documento", "valor", "material", "emitida_em", "forma",
-                   "formas", "valor_receber", "chave", "status", "pagamento_id", "arquivo", "arquivo_nome",
+                   "formas", "valor_receber", "previsto", "chave", "status", "pagamento_id", "arquivo", "arquivo_nome",
                    "comprovante_cartao", "comprovante_cartao_nome"}),
-        "empresa", frozenset({"nota", "pedido", "empresa", "documento", "material", "emitida_em", "forma", "formas",
+        "empresa", frozenset({"nota", "pedido", "empresa", "documento", "material", "emitida_em", "forma", "formas", "previsto",
                               "chave", "arquivo", "arquivo_nome", "comprovante_cartao", "comprovante_cartao_nome",
                               "lancado_por"}),
         COR_TRANSFERENCIAS, " (Transferência)", STATUS_TRANSFERENCIA, "", PAGO, "",
