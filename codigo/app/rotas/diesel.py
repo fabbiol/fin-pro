@@ -266,6 +266,12 @@ def relatorio(periodo: Periodo = "semana", data: date | None = None):
     return r
 
 
+@router.get("/relatorio/maquina")
+def relatorio_maquina(maquina: str = ""):
+    """Relatório por máquina: cada abastecimento dela e o total por ano, mês e dia (sem máquina: só a lista para escolher)."""
+    return relatorio_diesel.historico_maquina(maquina[:120])
+
+
 MOEDA = '"R$" #,##0.00'
 LITROS = '#,##0.0 "L"'
 

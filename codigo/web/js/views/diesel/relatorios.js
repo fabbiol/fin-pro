@@ -2,6 +2,7 @@
 //   Simples   — o essencial em frases e quatro números, e quanto cada máquina gastou;
 //   Detalhado — + comparação com o período anterior, pontos de atenção, gráfico por dia, consumo e combustíveis;
 //   Completo  — + cada abastecimento (com o consumo do trecho), por dia, por posto e por pessoa.
+// E "Por máquina" (maquina.js): todo o histórico de uma máquina, por ano, mês e dia, com cada abastecimento.
 // O nível escolhido fica guardado neste aparelho.
 import { api } from "../../api.js";
 import { montarGraficoSeries } from "../../grafico.js";
@@ -14,6 +15,7 @@ export const NIVEIS = [
   ["simples", "Simples", "O essencial: quanto foi abastecido, o saldo e quanto cada máquina gastou."],
   ["detalhado", "Detalhado", "Mais: comparação com o período anterior, pontos de atenção, gráfico por dia, consumo e combustíveis."],
   ["completo", "Completo", "Tudo: cada abastecimento com o consumo do trecho, por dia, por posto e por quem abasteceu."],
+  ["maquina", "Por máquina", "Uma máquina: cada abastecimento dela, com o total por ano, por mês e por dia."],
 ];
 const CHAVE_NIVEL = "finpro.diesel.nivel";
 const TITULOS = { semana: "semanal", quinzena: "quinzenal", mes: "mensal", ano: "anual" };
@@ -92,9 +94,10 @@ function htmlFiltros(d) {
 
 // ------------------------------------------------------------------ montagem
 
-export function htmlRelatorios(d) {
+/** A escolha do nível (e o botão do Telegram, que não vale para o relatório por máquina). */
+export function htmlNiveis({ telegram = true, filtros = "" } = {}) {
   const [, , descricao] = NIVEIS.find(([chave]) => chave === relatorio.nivel);
-  const topo = `<section class="card dr-topo">
+  return `<section class="card dr-topo">
       <div class="dr-topo-linha">
         <div class="alternar-modo" role="tablist" aria-label="Nível do relatório">
           ${NIVEIS.map(([chave, rotulo]) => `<button role="tab" data-acao="nivel-relatorio" data-nivel="${chave}"
@@ -102,11 +105,15 @@ export function htmlRelatorios(d) {
         </div>
         <span class="sutil dr-descricao">${esc(descricao)}</span>
         <span class="espaco"></span>
-        <button class="btn btn-sm" data-acao="enviar-relatorio-diesel" title="Manda este relatório, neste nível, pelo bot do diesel para os responsáveis">
-          ${icone("telegram", 15)} Enviar no Telegram</button>
+        ${telegram ? `<button class="btn btn-sm" data-acao="enviar-relatorio-diesel" title="Manda este relatório, neste nível, pelo bot do diesel para os responsáveis">
+          ${icone("telegram", 15)} Enviar no Telegram</button>` : ""}
       </div>
-      ${htmlFiltros(d)}
+      ${filtros}
     </section>`;
+}
+
+export function htmlRelatorios(d) {
+  const topo = htmlNiveis({ filtros: htmlFiltros(d) });
   if (relatorio.nivel === "simples") return topo + htmlSimples(d);
   return topo + htmlDetalhado(d) + (relatorio.nivel === "completo" ? htmlCompleto(d) : "");
 }

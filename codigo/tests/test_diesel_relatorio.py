@@ -150,3 +150,45 @@ def test_api_do_relatorio_e_excel_completo(bot, semana, monkeypatch):
         enviado = cliente.post("/api/diesel/relatorio/enviar", params={"periodo": "semana", "data": "2026-09-23",
                                                                        "nivel": "detalhado"})
         assert enviado.json() == {"enviado": 1} and "Pontos de atenção" in bot.enviados[-1][1]["text"]
+
+
+def test_relatorio_por_maquina_tem_cada_abastecimento_e_os_totais_por_ano_mes_e_dia(semana):
+    r = relatorio.historico_maquina("caminhão", hoje=date(2026, 9, 25))  # sem diferença de maiúsculas e acentos
+    assert r["maquinas"] == ["Caminhão", "Escavadeira", "Gerador"]
+    assert r["maquina"]["nome"] == "Caminhão" and r["maquina"]["cadastrada"]
+    # 10/08 100 L · 16/09 100 L · 23/09 200 L + 100 L, todos de S10 a R$ 7,45
+    assert [(a["data"], a["litros"]) for a in r["abastecimentos"]][-1] == ("2026-08-10", 100)
+    assert {a["data"] for a in r["abastecimentos"]} == {"2026-08-10", "2026-09-16", "2026-09-23"}
+    assert r["total"] == {**r["total"], "litros": 500, "valor": 500 * 7.45, "abastecimentos": 4,
+                          "primeiro": "2026-08-10", "ultimo": "2026-09-23", "por_abastecimento": 125}
+    assert [(g["ano"], g["litros"], g["abastecimentos"]) for g in r["anos"]] == [(2026, 500, 4)]
+    assert [(g["mes"], g["rotulo"], g["litros"], g["valor"]) for g in r["meses"]] == [
+        ("2026-09", "setembro de 2026", 400, 400 * 7.45), ("2026-08", "agosto de 2026", 100, 745)]
+    assert [(g["data"], g["dia_semana"], g["litros"], g["abastecimentos"]) for g in r["dias"]] == [
+        ("2026-09-23", "qua", 300, 2), ("2026-09-16", "qua", 100, 1), ("2026-08-10", "seg", 100, 1)]
+    com_km = next(a for a in r["abastecimentos"] if a.get("medidor") == 150800)
+    assert com_km["trecho"]["rodado"] == 800 and com_km["trecho"]["rotulo"] == "4,0 km/L"
+    assert not any(a["estimado"] for a in r["abastecimentos"])  # o valor é gravado no lançamento (litros × preço)
+
+    # um abastecimento cancelado sai do relatório
+    servico.cancelar("abastecimentos", r["abastecimentos"][0]["id"], "Fábio")
+    assert relatorio.historico_maquina("Caminhão")["total"]["abastecimentos"] == 3
+
+
+def test_relatorio_por_maquina_sem_maquina_ou_desconhecida_traz_so_a_lista(semana):
+    for nome in ("", "Trator que não existe"):
+        r = relatorio.historico_maquina(nome)
+        assert r["maquinas"] == ["Caminhão", "Escavadeira", "Gerador"]
+        assert r["maquina"] is None and r["abastecimentos"] == [] and r["anos"] == []
+
+
+def test_api_do_relatorio_por_maquina(semana):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as cliente:
+        r = cliente.get("/api/diesel/relatorio/maquina", params={"maquina": "Escavadeira"}).json()
+        assert r["maquina"]["nome"] == "Escavadeira" and r["total"]["litros"] == 310
+        assert [g["mes"] for g in r["meses"]] == ["2026-09"] and len(r["abastecimentos"]) == 2
+        assert cliente.get("/api/diesel/relatorio/maquina").json()["maquina"] is None

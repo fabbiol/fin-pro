@@ -5,6 +5,8 @@
 * **completo**: + cada abastecimento com o consumo do trecho (desde o abastecimento anterior), por dia, por posto e
   por pessoa.
 
+E o relatório **por máquina** (``historico_maquina``): todo o histórico de uma máquina, por ano, mês e dia.
+
 A base é ``servico.resumo``; aqui entram as contas que só o relatório usa.
 """
 
@@ -27,6 +29,8 @@ DIAS_RITMO = 30  # o ritmo de gasto (para a previsão do saldo) é o dos último
 LIMITE_TELEGRAM = 3900  # a mensagem do Telegram aceita até 4.096 caracteres
 DIAS_SEMANA = ("seg", "ter", "qua", "qui", "sex", "sáb", "dom")
 MESES_CURTOS = ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
+MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro",
+         "dezembro")
 TITULOS = {"semana": "semanal", "quinzena": "quinzenal", "mes": "mensal", "ano": "anual"}
 ANTERIOR = {"semana": "à semana anterior", "quinzena": "à quinzena anterior", "mes": "ao mês anterior",
             "ano": "ao ano anterior"}
@@ -250,6 +254,77 @@ def analise(tipo: str = "semana", referencia: date | None = None, alerta_valor: 
     })
     r["alertas"] = _alertas(r, cadastro, alerta_valor, hoje)
     return r
+
+
+# --------------------------------------------------------------------------- por máquina (todo o histórico)
+
+
+def _somar(itens: list[dict], chave) -> list[dict]:
+    """Litros, valor e quantidade de abastecimentos por ``chave(abastecimento)``, do mais recente para o mais antigo."""
+    grupos: dict[str, dict] = {}
+    for a in itens:
+        g = grupos.setdefault(chave(a), {"litros": 0.0, "valor": 0.0, "abastecimentos": 0})
+        g["litros"] += _num(a.get("litros"))
+        g["valor"] += a["custo"]
+        g["abastecimentos"] += 1
+    return [{"chave": k, "litros": round(g["litros"], 2), "valor": round(g["valor"], 2), "abastecimentos": g["abastecimentos"]}
+            for k, g in sorted(grupos.items(), reverse=True)]
+
+
+def historico_maquina(nome: str = "", hoje: date | None = None) -> dict:
+    """Relatório por máquina: cada abastecimento dela, desde o primeiro, e o total por ano, por mês e por dia.
+
+    ``maquinas`` traz as máquinas para escolher: as cadastradas e as que só aparecem nos abastecimentos. Sem ``nome``
+    (ou com uma máquina que não existe), vem só essa lista.
+    """
+    hoje = hoje or date.today()
+    cadastro = {servico.normalizar(m["nome"]): m for m in servico.maquinas()}
+    nomes = {chave: m["nome"] for chave, m in cadastro.items()}
+    for a in servico.abastecimentos():
+        nome_abastecimento = (a.get("maquina") or "").strip()
+        if nome_abastecimento:
+            nomes.setdefault(servico.normalizar(nome_abastecimento), nome_abastecimento)
+    saida = {"maquinas": sorted(nomes.values(), key=servico.normalizar), "maquina": None, "total": None,
+             "anos": [], "meses": [], "dias": [], "abastecimentos": []}
+    chave = servico.normalizar(nome)
+    if not chave or chave not in nomes:
+        return saida
+
+    maquina = cadastro.get(chave) or {}
+    medidor = maquina.get("medidor") or ""
+    lista = servico.abastecimentos(maquina=nomes[chave])
+    trechos = _trechos(lista, hoje, cadastro)
+    itens = []
+    for a in lista:
+        dia = servico._data(a.get("data"))
+        if not dia:
+            continue
+        itens.append({**a, "data": dia.isoformat(), "custo": valor_do_abastecimento(a, dia),
+                      "estimado": not _num(a.get("valor")), "combustivel": combustivel_de(a),
+                      "trecho": trechos.get(a["id"]), "medidor_tipo": medidor})
+
+    anos = [{**g, "ano": int(g["chave"])} for g in _somar(itens, lambda a: a["data"][:4])]
+    meses = []
+    for g in _somar(itens, lambda a: a["data"][:7]):
+        ano, mes = (int(p) for p in g["chave"].split("-"))
+        meses.append({**g, "ano": ano, "mes": g["chave"], "rotulo": f"{MESES[mes - 1]} de {ano}"})
+    dias = []
+    for g in _somar(itens, lambda a: a["data"]):
+        dia = date.fromisoformat(g["chave"])
+        dias.append({**g, "data": g["chave"], "mes": g["chave"][:7], "dia_semana": DIAS_SEMANA[dia.weekday()]})
+
+    total_litros = sum(_num(a.get("litros")) for a in itens)
+    saida.update({
+        "maquina": {"nome": nomes[chave], "placa": maquina.get("placa") or "", "tipo": maquina.get("tipo") or "",
+                    "medidor": medidor, "status": maquina.get("status") or "", "cadastrada": bool(maquina)},
+        "total": {"litros": round(total_litros, 2), "valor": round(sum(a["custo"] for a in itens), 2),
+                  "abastecimentos": len(itens), "primeiro": itens[-1]["data"] if itens else None,
+                  "ultimo": itens[0]["data"] if itens else None,
+                  "por_abastecimento": round(total_litros / len(itens), 2) if itens else 0.0,
+                  "consumo": servico.consumo(maquina or None, lista)},
+        "anos": anos, "meses": meses, "dias": dias, "abastecimentos": itens,
+    })
+    return saida
 
 
 # --------------------------------------------------------------------------- texto (Telegram)

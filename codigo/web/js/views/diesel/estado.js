@@ -22,6 +22,7 @@ export const tela = {
   maquinas: [],
   precos: [],
   conferencia: [],
+  historico: null,  // relatório por máquina: resposta de /api/diesel/relatorio/maquina
 };
 
 const formatoLitros = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
