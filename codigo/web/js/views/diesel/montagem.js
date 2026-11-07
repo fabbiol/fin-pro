@@ -9,8 +9,9 @@ import {
   carregarMaquinas, formularioCanhoto, formularioCompra, formularioMaquina, formularioPrecos, lerArquivo,
 } from "./formularios.js";
 import { htmlMaquinas } from "./maquinas.js";
+import { abrir, escolherMaquina, htmlPorMaquina, porMaquina } from "./maquina.js";
 import { cancelar, editar, historico, htmlPainel } from "./painel.js";
-import { desenharGraficoDiesel, enviarRelatorio, escolherNivel, htmlRelatorios, relatorio } from "./relatorios.js";
+import { desenharGraficoDiesel, enviarRelatorio, escolherNivel, htmlNiveis, htmlRelatorios, relatorio } from "./relatorios.js";
 
 export async function montar(el, params) {
   tela.raiz = el;
@@ -42,9 +43,10 @@ export function desmontar() {
   tela.raiz = null;
 }
 
+/** Período e ações. Sem ``d`` (relatório por máquina, que mostra todo o histórico), só as ações. */
 function barraPeriodo(d) {
   return `<section class="card barra-filtros caixa-periodo">
-    <div class="alternar-modo" role="tablist" aria-label="Período">
+    ${d ? `<div class="alternar-modo" role="tablist" aria-label="Período">
       ${PERIODOS.map(([chave, rotulo]) => `<button role="tab" data-periodo="${chave}" class="${tela.periodo === chave ? "ativo" : ""}">${rotulo}</button>`).join("")}
     </div>
     <div class="caixa-navegar">
@@ -52,7 +54,7 @@ function barraPeriodo(d) {
       <strong>${esc(d.periodo.rotulo)}</strong>
       <button class="btn-icone" data-navegar="${esc(d.periodo.seguinte)}" title="Próximo período" aria-label="Próximo período">›</button>
       <button class="btn btn-sm btn-fantasma" data-navegar="${hojeISO()}">Hoje</button>
-    </div>
+    </div>` : ""}
     <span class="espaco"></span>
     <label class="btn btn-sm btn-primario" title="Foto ou PDF do canhoto ou do comprovante: o sistema lê e você só confere">
       ${icone("upload", 15)} Enviar canhoto ou comprovante
@@ -60,7 +62,7 @@ function barraPeriodo(d) {
     <button class="btn btn-sm" data-acao="novo-abastecimento">${icone("diesel", 15)} Abastecimento</button>
     <button class="btn btn-sm" data-acao="nova-compra">${icone("mais", 15)} Compra</button>
     <a class="btn btn-sm btn-fantasma" href="#/comprovantes?tipo=diesel" title="Buscar canhotos e comprovantes do diesel">${icone("clipe", 15)} Comprovantes</a>
-    <a class="btn btn-sm btn-fantasma" href="/api/diesel/relatorio/arquivo?periodo=${tela.periodo}&data=${tela.data}">${icone("planilha", 15)} Excel</a>
+    ${d ? `<a class="btn btn-sm btn-fantasma" href="/api/diesel/relatorio/arquivo?periodo=${tela.periodo}&data=${tela.data}">${icone("planilha", 15)} Excel</a>` : ""}
   </section>`;
 }
 
@@ -82,6 +84,12 @@ async function desenhar() {
       destino.innerHTML = htmlMaquinas(await carregarMaquinas());
       return;
     }
+    if (porMaquinaAberto()) {
+      tela.historico = await api.get(`/api/diesel/relatorio/maquina?maquina=${encodeURIComponent(porMaquina.nome)}`);
+      if (!tela.raiz) return;
+      pintar();
+      return;
+    }
     const caminho = tela.aba === "relatorios" ? "/api/diesel/relatorio" : "/api/diesel";
     tela.dados = await api.get(`${caminho}?periodo=${tela.periodo}&data=${tela.data}`);
     if (!tela.raiz) return;
@@ -92,11 +100,20 @@ async function desenhar() {
   }
 }
 
+const porMaquinaAberto = () => tela.aba === "relatorios" && relatorio.nivel === "maquina";
+
 /** Redesenha com os dados já carregados (trocar o nível ou o filtro do relatório não precisa ir ao servidor). */
 function pintar() {
   const destino = tela.raiz?.querySelector("#diesel-conteudo");
-  if (!destino || !tela.dados) return;
+  if (!destino) return;
   const rolagem = window.scrollY;
+  if (porMaquinaAberto()) {
+    if (!tela.historico) return;
+    destino.innerHTML = barraPeriodo(null) + htmlPorMaquina(tela.historico, htmlNiveis({ telegram: false }));
+    window.scrollTo({ top: rolagem });
+    return;
+  }
+  if (!tela.dados) return;
   destino.innerHTML = barraPeriodo(tela.dados) + (tela.aba === "relatorios" ? htmlRelatorios(tela.dados) : htmlPainel(tela.dados));
   if (tela.aba === "relatorios") desenharGraficoDiesel(destino, tela.dados);
   window.scrollTo({ top: rolagem });
@@ -137,8 +154,15 @@ async function aoClicar(e) {
     case "conferir-compra": return conferir(d.id, "compra");
     case "descartar-diesel": return descartar(d.id);
     case "enviar-relatorio-diesel": return enviarRelatorio(tela);
-    case "nivel-relatorio":
+    case "nivel-relatorio": {  // entrar ou sair do relatório por máquina busca outros dados
+      const antes = porMaquinaAberto();
       escolherNivel(d.nivel);
+      return antes !== porMaquinaAberto() ? desenhar() : pintar();
+    }
+    case "maquina-ano":
+    case "maquina-mes":
+    case "maquina-dia":
+      abrir(d.acao, d.valor);
       return pintar();
     case "limpar-filtro-diesel":
       relatorio.maquina = "";
@@ -150,6 +174,11 @@ async function aoClicar(e) {
 }
 
 function aoEscolherArquivo(e) {
+  if (e.target.matches("[data-maquina-historico]")) {
+    escolherMaquina(e.target.value);
+    desenhar();
+    return;
+  }
   const filtro = e.target.closest("[data-filtro-diesel]");
   if (filtro) {
     relatorio[filtro.dataset.filtroDiesel] = filtro.value;
