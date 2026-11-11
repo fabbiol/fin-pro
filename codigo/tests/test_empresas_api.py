@@ -66,6 +66,15 @@ def test_fechamento_em_json_excel_e_pdf(cliente):
     assert pdf.content[:4] == b"%PDF"
 
 
+def test_fechamento_em_excel_de_empresa_com_barra_no_nome(cliente):
+    """O Excel não aceita / \\ ? * [ ] : no nome da aba: "Silva S/A" derrubava o download."""
+    empresa = _empresa(cliente, "Construtora Silva S/A")
+    assert _nota(cliente, "Construtora Silva S/A").status_code == 201
+    xlsx = cliente.get(f"/api/empresas/{empresa['id']}/fechamento/arquivo?competencia=2026-08")
+    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+    assert "fechamento-construtora-silva-s-a-2026-08.xlsx" in xlsx.headers["content-disposition"]
+
+
 def test_mover_a_nota_para_outro_fechamento(cliente):
     """A NF chegou depois do dia 20: dá para mandá-la para o fechamento seguinte, com todas as suas linhas."""
     _empresa(cliente)
