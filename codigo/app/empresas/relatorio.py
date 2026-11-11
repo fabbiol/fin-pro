@@ -53,7 +53,8 @@ def nome_do_arquivo(f: dict, extensao: str) -> str:
 def gerar_xlsx(f: dict, minha_empresa: dict | None = None) -> bytes:
     wb = Workbook()
     ws = wb.active
-    ws.title = f"Fechamento {f['empresa']}"[:31]
+    # o Excel não aceita / \ ? * [ ] : no nome da aba (ex.: empresa "Silva S/A")
+    ws.title = re.sub(r"[/\\?*\[\]:]", "-", f"Fechamento {f['empresa']}")[:31]
     borda = Border(*(Side(style="thin", color="7F9DB9"),) * 4)
     ultima = get_column_letter(len(COLUNAS))
 
