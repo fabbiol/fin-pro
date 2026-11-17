@@ -613,7 +613,7 @@ Reconhece sozinho o que é cada arquivo:
 
 | O que chega | O que o sistema faz |
 |---|---|
-| **Nota fiscal** (XML da NF-e, DANFE em PDF ou foto) | Identifica a empresa (CNPJ, nome ou apelido), lança **uma linha por material** no fechamento (data, material, unidade, quantidade, valor unitário, total, NF e pedido) e responde com o total e quanto falta |
+| **Nota fiscal** (XML da NF-e, DANFE em PDF ou foto — o modelo antigo e o novo da Reforma Tributária, com IBS/CBS) | Identifica a empresa (CNPJ ou CPF de cliente pessoa física, nome ou apelido), lança **uma linha por material** no fechamento (data, material, unidade, quantidade, valor unitário, total, NF e pedido) e responde com o total e quanto falta |
 | **Cheque escaneado** (frente e verso) | Lê a foto nas quatro orientações; entende o **"Bom p/ 24/09/26"** escrito à mão (canto inferior direito); lê valor, banco, agência, **cooperativa**, conta e número pela linha **CMC-7**; descobre a empresa pelo CNPJ; pega a **lista de pedidos escrita no verso** |
 | **Comprovante de Pix, TED ou depósito** | Dá **baixa automática** nas notas citadas e responde quanto ainda falta |
 | **Comprovante de depósito de cheque** | Reconhece que é um depósito de cheque (ex.: Bradesco "Depósito de cheque", cheque 616, R$ 4.287,60), acha o cheque pelo número/valor e **compensa o cheque certo**, sem confundir com o cheque do dia |

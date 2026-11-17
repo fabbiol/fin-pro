@@ -52,6 +52,9 @@ def test_identifica_a_empresa_por_cnpj_nome_ou_apelido(imapal):
     assert servico.identificar_empresa(nome="Imapal Construções Ltda")["id"] == imapal["id"]
     assert servico.identificar_empresa(texto="Cheque da imapal, pedido 7043")["id"] == imapal["id"]
     assert servico.identificar_empresa(nome="Outra Empresa") is None
+    # cliente pessoa física, cadastrado pelo CPF (o DANFE novo traz o CPF no lugar do CNPJ)
+    cliente = servico.salvar_empresa({"nome": "Maria Exemplo", "cnpj": "123.456.789-09"})
+    assert servico.identificar_empresa(cnpj="12345678909", nome="M. E. S.")["id"] == cliente["id"]
 
 
 def test_nao_deixa_cadastrar_duas_empresas_com_o_mesmo_nome(imapal):

@@ -10,11 +10,14 @@ from datetime import date
 
 from ..boleto.texto import extrair_data, normalizar
 from ..empresas.leitura import (
-    RE_CNPJ_SOLTO, _linhas, _nome_de_empresa, _valores_do_texto, eh_xml, ler_xml_nota, texto_do_arquivo,
+    RE_CNPJ_SOLTO, _linhas, _nome_de_empresa, _valores_do_texto, eh_xml, emitente_do_canhoto, ler_xml_nota,
+    texto_do_arquivo,
 )
 
-# Do mais confiável para o menos: "Valor a pagar R$ 179,70" é o que saiu do caixa
-ROTULOS_TOTAL = (r"valor a pagar", r"total a pagar", r"valor total", r"total geral", r"total da (nota|compra|venda)",
+# Do mais confiável para o menos: "Valor a pagar R$ 179,70" é o que saiu do caixa; no DANFE, o total da nota vem
+# antes do "valor total" solto (que no DANFE também é o dos serviços, quase sempre R$ 0,00)
+ROTULOS_TOTAL = (r"valor a pagar", r"total a pagar", r"(valor|v\.?) total da nota", r"valor total", r"total geral",
+                 r"total da (nota|compra|venda)",
                  r"total\s*r\$", r"\btotal\b")
 NAO_E_TOTAL = ("troco", "dinheiro", "valor pago", "valor recebido", "recebido", "desconto", "acrescimo", "tributo",
                "imposto", "12.741", "12741", "itens", "qtd", "quantidade")
@@ -43,7 +46,11 @@ def valor_total(texto: str) -> float | None:
 
 
 def estabelecimento(texto: str) -> str:
-    """Nome da loja: a primeira linha com cara de nome, antes do CNPJ, que não é cabeçalho do cupom."""
+    """Nome da loja: no DANFE, quem emitiu (pelo canhoto); no cupom, a primeira linha com cara de nome, antes do
+    CNPJ, que não é cabeçalho."""
+    emitente = emitente_do_canhoto(texto)
+    if emitente:
+        return emitente
     for linha in _linhas(texto)[:12]:
         normal = normalizar(linha)
         if any(c in normal for c in CABECALHOS) or len(re.findall(r"[A-Za-zÀ-ÿ]", linha)) < 4:

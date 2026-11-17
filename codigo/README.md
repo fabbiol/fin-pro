@@ -117,7 +117,7 @@ reconhece sozinho o que é cada arquivo:
 
 | O que você manda | O que o sistema faz |
 | --- | --- |
-| **Nota fiscal** (XML da NF-e, DANFE em PDF ou foto) | identifica a empresa, lança cada material como uma linha do fechamento (data, material, unidade, quantidade, valor unitário, total, NF e pedido) e responde com o total do fechamento |
+| **Nota fiscal** (XML da NF-e, DANFE em PDF ou foto — o modelo antigo e o novo da Reforma Tributária, com IBS/CBS) | identifica a empresa (CNPJ ou CPF, nome ou apelido), lança cada material como uma linha do fechamento (data, material, unidade, quantidade, valor unitário, total, NF e pedido) e responde com o total do fechamento |
 | **Cheque escaneado** (frente e verso) | lê a foto nas quatro orientações, entende o **"Bom p/ 24/09/26"** escrito à mão, o valor, banco, agência, cooperativa, conta e número do cheque, descobre a empresa pelo CNPJ impresso e pega a **lista de pedidos escrita no verso** |
 | **Comprovante** de Pix, TED ou depósito | dá **baixa automática** nas notas citadas e responde quanto ainda falta daquele fechamento |
 | **Print do fechamento** que já estava em andamento | lê a tabela linha por linha para você conferir e importar (é assim que o módulo começa a operar) |

@@ -180,6 +180,112 @@ def test_numero_da_nota_sai_da_chave_de_acesso():
     assert leitura._numero_pela_chave("sem chave nenhuma") == ""
 
 
+# DANFE da Reforma Tributária (com IBS/CBS/IS): cada item ocupa várias linhas e o total é "V. TOTAL DA NOTA".
+# Dados de exemplo: o cliente e o CPF são fictícios.
+DANFE_REFORMA = """1
+1
+RECEBEMOS DE PROSPERA INDUSTRIA COMERCIO E SERVICOS LTDA OS PRODUTOS E SERVIÇOS CONSTANTES NA NOTA FISCAL INDICADA AO LADO NF-e
+Nº 7300
+Série 1
+PROSPERA INDUSTRIA
+COMERCIO E SERVICOS LTDA
+DANFE
+DOCUMENTO AUXILIAR
+DA NOTA FISCAL
+ELETRÔNICA
+Nº 7300
+SÉRIE: 1
+CHAVE DE ACESSO
+51261103880985000185550010000073001123456789
+INSCRIÇÃO ESTADUAL DO SUBST. TRIB. CNPJ
+03.880.985/0001-85
+DESTINATÁRIO/REMETENTE
+NOME/RAZÃO SOCIAL
+Maria Exemplo da Silva
+CNPJ/CPF
+123.456.789-09
+DATA DE EMISSÃO
+17/11/2026
+INSCRIÇÃO ESTADUAL
+00111111111
+CALCULO DO IMPOSTO
+V. TOTAL DE
+PRODUTOS
+1611,60
+V. TOTAL DA NOTA
+1611,60
+TOTAL DO IBS / CBS / IS
+VALOR DA CBS VALOR DO IBS UF VALOR DO IBS MUNICÍPIO VALOR DO IMPOSTO SELETIVO
+DADOS DO PRODUTO/SERVIÇO
+DESCRIÇÃO DO PRODUTO / SERVIÇO CST / CFOP QTD / UN VLR UNIT VLR TOTAL BASES DE CÁLCULO ALÍQUOTAS VALOR DOS TRIBUTOS
+2000000000202 - BRITA 01 COMERCIAL
+[NCM 25171000]
+CST 020
+CFOP 5101
+7,000
+M3
+158,80 1111,60 ICMS 196,20
+IBS / CBS
+IS
+IPI 0,00
+ICMS 17,00% / CBS
+IBS UF / IPI 0,00%
+IBS MUN / IS
+2000000000301 - PEDRISCO LAVADO PARA
+CONCRETO
+[NCM 25171000]
+CST 020
+CFOP 5101
+5,000
+M3
+100,00 500,00 ICMS 0,00
+IBS / CBS
+IS
+IPI 0,00
+CALCULO DO ISSQN
+INSCRIÇÃO MUNICIPAL VALOR TOTAL DOS SERVIÇOS
+0,00
+DADOS ADICIONAIS
+INFORMAÇÕES COMPLEMENTARES
+Pedido: 7510; Documento fiscal emitido com reducao de base de calculo
+"""
+
+
+def test_le_o_danfe_novo_da_reforma_tributaria():
+    assert leitura.classificar(DANFE_REFORMA) == "nota"
+    nota = leitura.extrair_nota(DANFE_REFORMA)
+    assert nota["numero_nf"] == "7300" and nota["serie"] == "1" and nota["data"] == date(2026, 11, 17)
+    assert nota["emitente"] == {"nome": "PROSPERA INDUSTRIA COMERCIO E SERVICOS LTDA", "cnpj": "03880985000185"}
+    # cliente pessoa física: o CPF entra no lugar do CNPJ
+    assert nota["destinatario"] == {"nome": "Maria Exemplo da Silva", "cnpj": "12345678909"}
+    assert nota["valor_total"] == 1611.60 and nota["pedidos"] == ["7510"] and nota["confianca"] >= 0.8
+    assert nota["itens"] == [
+        {"material": "BRITA 01 COMERCIAL", "unidade": "M³", "quantidade": 7.0, "valor_unitario": 158.8,
+         "valor_total": 1111.6, "pedido": ""},
+        {"material": "PEDRISCO LAVADO PARA CONCRETO", "unidade": "M³", "quantidade": 5.0, "valor_unitario": 100.0,
+         "valor_total": 500.0, "pedido": ""},
+    ]
+
+
+def test_danfe_novo_no_caixa_le_o_total_da_nota_e_quem_emitiu():
+    from app.caixa.leitura import analisar_texto
+
+    lido = analisar_texto(DANFE_REFORMA, hoje=date(2026, 11, 30))
+    assert lido["valor"] == 1611.60  # e não o "VALOR TOTAL DOS SERVIÇOS" (R$ 0,00)
+    assert lido["local"] == "PROSPERA INDUSTRIA COMERCIO E SERVICOS LTDA" and lido["cnpj"] == "03880985000185"
+
+
+def test_xml_da_reforma_tributaria_com_ibs_cbs_e_cliente_com_cpf():
+    xml = (XML_NFE.replace("<dest><CNPJ>12345678000195</CNPJ><xNome>IMAPAL CONSTRUCOES LTDA</xNome></dest>",
+                           "<dest><CPF>12345678909</CPF><xNome>MARIA EXEMPLO DA SILVA</xNome></dest>")
+           .replace("</prod></det>", "</prod><imposto><IBSCBS><CST>000</CST><gIBSCBS><vBC>100.00</vBC></gIBSCBS>"
+                                     "</IBSCBS></imposto></det>")
+           .replace("</ICMSTot>", "</ICMSTot><IBSCBSTot><vBCIBSCBS>2405.60</vBCIBSCBS></IBSCBSTot>"))
+    nota = leitura.ler_xml_nota(xml.encode("utf-8"))
+    assert nota["destinatario"] == {"nome": "MARIA EXEMPLO DA SILVA", "cnpj": "12345678909"}
+    assert nota["valor_total"] == 2405.60 and [i["valor_total"] for i in nota["itens"]] == [1905.6, 500.0]
+
+
 def test_analisar_reconhece_o_xml_sem_precisar_de_ocr():
     analise = leitura.analisar(XML_NFE.encode("utf-8"), "nfe-6859.xml")
     assert analise["tipo"] == "nota" and analise["dados"]["numero_nf"] == "6859"

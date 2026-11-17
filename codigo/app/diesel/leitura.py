@@ -17,7 +17,7 @@ from itertools import permutations
 
 from ..boleto.texto import extrair_data, normalizar
 from ..caixa.leitura import estabelecimento, valor_total
-from ..empresas.leitura import _linhas, _valores_do_texto, texto_do_arquivo
+from ..empresas.leitura import _linhas, _valores_do_texto, emitente_do_canhoto, texto_do_arquivo
 
 LIMITE_CANHOTO = 600.0  # acima disso, em litros, é compra (o estoque da semana), não o abastecimento de uma máquina
 PRECO_MINIMO, PRECO_MAXIMO = 2.0, 15.0  # faixa de preço do litro (separa o preço dos litros e do total)
@@ -251,6 +251,9 @@ def _posto(texto: str, tipo: str) -> str:
         return (len(re.findall(r"[a-z]", normal)) >= 4 and not any(r in normal for r in RUIDO_DO_BANCO)
                 and not (nossa and (nossa in normal or normal in nossa)) and "prospera" not in normal)
 
+    emitente = emitente_do_canhoto(texto)  # DANFE: o canhoto diz quem emitiu
+    if emitente and aceitavel(emitente):
+        return emitente
     for linha in linhas[:12]:
         if re.search(r"\bposto\b", normalizar(linha)) and aceitavel(linha):
             return re.sub(r"\s+", " ", linha).strip()[:80]

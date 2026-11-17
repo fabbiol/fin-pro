@@ -177,10 +177,11 @@ def _nomes_da_empresa(empresa: dict) -> list[str]:
 
 
 def identificar_empresa(*, cnpj: str = "", nome: str = "", texto: str = "") -> dict | None:
-    """Descobre de qual empresa é um documento: primeiro pelo CNPJ, depois pelo nome ou pelos apelidos."""
+    """Descobre de qual empresa é um documento: primeiro pelo CNPJ (ou CPF, de cliente pessoa física), depois pelo
+    nome ou pelos apelidos."""
     cadastradas = empresas()
     documento = digitos(cnpj)
-    if len(documento) == 14:
+    if len(documento) in (11, 14):
         for empresa in cadastradas:
             if digitos(empresa.get("cnpj")) == documento:
                 return empresa
