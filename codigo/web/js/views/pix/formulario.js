@@ -48,7 +48,7 @@ export function criarFormulario(container, opcoes = {}) {
         <div class="campo col-2"><label for="${id}-receb">Recebedor</label>
           <input id="${id}-receb" class="input" name="recebedor" maxlength="250" placeholder="Nome da pessoa ou empresa" value="${esc(dados.recebedor || "")}"></div>
         <div class="campo"><label for="${id}-centro">Centro de custo</label>
-          <select id="${id}-centro" class="input" name="centro_custo" data-centro-select>${opcoesCentro(centros, dados.centro_custo || "")}</select></div>
+          <select id="${id}-centro" class="input" name="centro_custo" data-centro-select data-dividir>${opcoesCentro(centros, dados.centro_custo || "", { dividir: true })}</select></div>
         <div class="campo"><label for="${id}-status">Status</label>
           <select id="${id}-status" class="input" name="status">${status.map((s) => `<option ${dados.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
         ${editar ? `<div class="campo"><label for="${id}-pag">Data de pagamento</label>
@@ -274,7 +274,7 @@ export function criarFormulario(container, opcoes = {}) {
       const v = parseValor(e.target.value);
       if (v !== null && Number.isFinite(v)) e.target.value = numeroBR(v);
     } else if (nome === "centro_custo") {
-      dados.centro_custo = await tratarNovoCentro(e.target, dados.centro_custo || "");
+      dados.centro_custo = await tratarNovoCentro(e.target, dados.centro_custo || "", () => parseValor(campo("valor").value));
       centros = await carregarCentros().catch(() => centros);
     } else if (nome === "status" && e.target.value === "Pago") {
       const pagamento = campo("data_pagamento");

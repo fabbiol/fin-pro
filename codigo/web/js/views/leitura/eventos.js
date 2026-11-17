@@ -30,7 +30,7 @@ export async function aoAlterar(e) {
   const { item, boleto } = localizar(e.target);
   if (!boleto) return;
   if (campo === "centro_custo") {
-    boleto.form.centro_custo = await tratarNovoCentro(e.target, boleto.form.centro_custo);
+    boleto.form.centro_custo = await tratarNovoCentro(e.target, boleto.form.centro_custo, () => parseValor(boleto.form.valor));
     tela.centros = await carregarCentros().catch(() => tela.centros);
     return;
   }

@@ -1,7 +1,7 @@
 // Pagamentos Pix · lista de Pix lançados, pagamento e QR code.
 import { abrirDetalhes } from "../../detalhes.js";
 import { api } from "../../api.js";
-import { NOVO_CENTRO, carregarCentros, opcoesCentro, opcoesFiltroCentro, tratarNovoCentro } from "../../centros.js";
+import { NOVO_CENTRO, carregarCentros, costCenterTags, opcoesCentro, opcoesFiltroCentro, tratarNovoCentro } from "../../centros.js";
 import { icone } from "../../icons.js";
 import {
   abrirModal, brl, confirmar, copiar, dataBR, dataHoraBR, debounce, esc, hojeISO, mensagemErro, numeroBR, parseValor,
@@ -74,7 +74,7 @@ export function linha(r) {
   return `<tr data-id="${r.id}" class="${r.pendente_gravacao ? "linha-pendente" : ""}">
     <td data-rotulo="Data prevista"><div class="celula-venc"><strong class="${cancelado ? "riscado" : ""}">${dataBR(r.vencimento)}</strong>${seloSituacao(r.situacao, r.dias_para_vencer)}${pendente}</div></td>
     <td data-rotulo="Recebedor" class="celula-benef"><strong title="${esc(r.recebedor)}">${esc(r.recebedor || "—")}</strong>
-      <span>${r.descricao ? esc(r.descricao) : "&nbsp;"}</span>${r.centro_custo ? `<span class="tag-centro">${icone("etiqueta", 11)}${esc(r.centro_custo)}</span>` : ""}</td>
+      <span>${r.descricao ? esc(r.descricao) : "&nbsp;"}</span>${costCenterTags(r.centro_custo)}</td>
     <td data-rotulo="Chave Pix"><div class="celula-chave">
       <span class="chip">${esc(r.tipo_chave_rotulo || (r.copia_e_cola ? "Copia e Cola" : "—"))}</span>
       ${r.chave ? `<button class="linha-copiar mono" data-acao="copiar-chave" title="Copiar a chave: ${esc(r.chave_formatada)}">${icone("copiar", 13)}<span>${esc(r.chave_formatada)}</span></button>` : ""}

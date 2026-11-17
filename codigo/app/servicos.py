@@ -11,6 +11,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from . import cost_center
 from .boleto.codigo import somente_digitos
 from .boleto.texto import normalizar
 from .pix import TIPOS_CHAVE, formatar_chave
@@ -107,12 +108,12 @@ def filtrar(
                 aceitos |= {"vencido", "vence_hoje", "a_vencer"}
             if sit not in aceitos:
                 continue
-        if centro_normalizado:
-            atual = (r.get("centro_custo") or "").strip().lower()
+        if centro_normalizado:  # com o valor dividido, o lançamento aparece em cada um dos centros
+            atuais = {nome.lower() for nome in cost_center.names(r.get("centro_custo"))}
             if centro_normalizado == "__sem__":
-                if atual:
+                if atuais:
                     continue
-            elif atual != centro_normalizado:
+            elif centro_normalizado not in atuais:
                 continue
         if de or ate:
             valor_data = r.get(campo_data)
@@ -332,19 +333,18 @@ def analise_gastos(
                 continue
         selecionados.append((origem, r, data_ref))
 
-    def nome_centro(r):
-        return (r.get("centro_custo") or "").strip() or SEM_CENTRO
+    def partes_por_centro(r):  # o gasto em cada centro: um só, ou as partes de um valor dividido
+        return [(nome or SEM_CENTRO, parte) for nome, parte in cost_center.allocate(r.get("centro_custo"), gasto(r))]
 
     por_centro: dict[str, dict] = {}
     for origem, r, _ in selecionados:
-        nome = nome_centro(r)
-        item = por_centro.setdefault(nome.lower(), {"centro": nome, "total": 0.0, "boletos": 0.0, "pix": 0.0,
-                                                    "dinheiro": 0.0, "quantidade": 0, "pagos": 0.0, "pendentes": 0.0})
-        v = gasto(r)
-        item["total"] += v
-        item[{"boleto": "boletos", "pix": "pix"}.get(origem, "dinheiro")] += v
-        item["quantidade"] += 1
-        item["pagos" if situacao(r, hoje) == "pago" else "pendentes"] += v
+        for nome, v in partes_por_centro(r):
+            item = por_centro.setdefault(nome.lower(), {"centro": nome, "total": 0.0, "boletos": 0.0, "pix": 0.0,
+                                                        "dinheiro": 0.0, "quantidade": 0, "pagos": 0.0, "pendentes": 0.0})
+            item["total"] += v
+            item[{"boleto": "boletos", "pix": "pix"}.get(origem, "dinheiro")] += v
+            item["quantidade"] += 1
+            item["pagos" if situacao(r, hoje) == "pago" else "pendentes"] += v
 
     total = sum(i["total"] for i in por_centro.values())
     centros = sorted(por_centro.values(), key=lambda i: i["total"], reverse=True)
@@ -357,7 +357,8 @@ def analise_gastos(
     meses: dict[date, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for _, r, data_ref in selecionados:
         if isinstance(data_ref, date):
-            meses[date(data_ref.year, data_ref.month, 1)][nome_centro(r)] += gasto(r)
+            for nome, v in partes_por_centro(r):
+                meses[date(data_ref.year, data_ref.month, 1)][nome] += v
     serie_mensal = []
     for mes in sorted(meses):
         valores = meses[mes]

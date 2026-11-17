@@ -257,7 +257,7 @@ export function htmlBoleto(b) {
         <div class="campo"><label>Status</label>
           <select class="input" data-campo="status">${["Pendente", "Pago"].map((s) => `<option ${f.status === s ? "selected" : ""}>${s}</option>`).join("")}</select></div>
         <div class="campo"><label>Centro de custo <span class="sutil">(onde foi gasto)</span></label>
-          <select class="input" data-campo="centro_custo" data-centro-select>${opcoesCentro(tela.centros, f.centro_custo)}</select></div>
+          <select class="input" data-campo="centro_custo" data-centro-select data-dividir>${opcoesCentro(tela.centros, f.centro_custo, { dividir: true })}</select></div>
         ${campoTexto("observacoes", "Observações", b, "col-2", 'placeholder="Opcional"')}
       </div>
 

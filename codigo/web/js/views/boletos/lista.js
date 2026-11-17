@@ -6,7 +6,7 @@ import {
   parseValor, seloSituacao, toast,
 } from "../../ui.js";
 import { abrirDetalhes } from "../../detalhes.js";
-import { NOVO_CENTRO, carregarCentros, escolherCentro, opcoesCentro, opcoesFiltroCentro, tratarNovoCentro } from "../../centros.js";
+import { NOVO_CENTRO, carregarCentros, costCenterTags, escolherCentro, opcoesCentro, opcoesFiltroCentro, tratarNovoCentro } from "../../centros.js";
 import { pode } from "../../estado.js";
 import { COLUNAS, filtros, selecionados, tela } from "./estado.js";
 import { carregarCalendario } from "./calendario.js";
@@ -83,7 +83,7 @@ export function linha(r) {
   return `<tr data-id="${r.id}" class="${selecionados.has(r.id) ? "selecionado" : ""} ${r.pendente_gravacao ? "linha-pendente" : ""}">
     <td class="col-check"><input type="checkbox" data-marcar="${r.id}" ${selecionados.has(r.id) ? "checked" : ""} aria-label="Selecionar boleto"></td>
     <td data-rotulo="Vencimento"><div class="celula-venc"><strong class="${cancelado ? "riscado" : ""}">${dataBR(r.vencimento)}</strong>${seloSituacao(r.situacao, r.dias_para_vencer)}${pendente}</div></td>
-    <td data-rotulo="Beneficiário" class="celula-benef"><strong title="${esc(r.beneficiario)}">${esc(r.beneficiario || "—")}</strong><span>${detalhes || "&nbsp;"}</span>${r.centro_custo ? `<span class="tag-centro">${icone("etiqueta", 11)}${esc(r.centro_custo)}</span>` : ""}</td>
+    <td data-rotulo="Beneficiário" class="celula-benef"><strong title="${esc(r.beneficiario)}">${esc(r.beneficiario || "—")}</strong><span>${detalhes || "&nbsp;"}</span>${costCenterTags(r.centro_custo)}</td>
     ${celulaValor(r, cancelado)}
     <td data-rotulo="Linha digitável">${r.linha_digitavel
       ? `<button class="linha-copiar mono" data-acao="copiar" title="Copiar: ${esc(r.linha_digitavel)}">${icone("copiar", 13)}<span>${esc(r.linha_digitavel)}</span></button>`

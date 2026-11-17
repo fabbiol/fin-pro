@@ -16,6 +16,7 @@ from datetime import date, datetime, timedelta
 from html import escape
 
 from . import contexto as ctx
+from . import cost_center
 from .notificacoes.regras import DIAS_SEMANA, LIMITE_TELEGRAM, Mensagem, brl
 
 log = logging.getLogger(__name__)
@@ -165,8 +166,9 @@ def coletar(tipo: str, hoje: date | None = None) -> dict:
     caixa = _caixa(inicio, ate)
     centros: dict[str, float] = {}
     for item in [*boletos, *pix, *caixa["lista_saidas"]]:
-        nome = item["centro"] or "Sem centro de custo"
-        centros[nome] = centros.get(nome, 0.0) + item["valor"]
+        for nome, parte in cost_center.allocate(item["centro"], item["valor"]):
+            nome = nome or "Sem centro de custo"
+            centros[nome] = centros.get(nome, 0.0) + parte
     proxima_inicio = fim + timedelta(days=1)
     proxima_fim = proxima_inicio + timedelta(days=6)
     dados.update(

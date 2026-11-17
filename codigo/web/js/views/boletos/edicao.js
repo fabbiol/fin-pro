@@ -36,7 +36,7 @@ export function abrirEdicao(r) {
         <div class="linha-campos"><div class="input-prefixo"><span>+R$</span><input id="e-juros" class="input" name="juros_multa" inputmode="decimal" value="${esc(numeroBR(r.juros_multa))}"></div>
           <div class="input-prefixo"><span>−R$</span><input class="input" name="desconto" inputmode="decimal" value="${esc(numeroBR(r.desconto))}" aria-label="Desconto"></div></div></div>
       <div class="campo col-2"><label for="e-centro">Centro de custo (onde foi gasto)</label>
-        <select id="e-centro" class="input" name="centro_custo" data-centro-select>
+        <select id="e-centro" class="input" name="centro_custo" data-centro-select data-dividir>
           <option value="${esc(r.centro_custo || "")}">${esc(r.centro_custo || "Sem centro de custo")}</option></select></div>
       <div class="campo col-2"><label for="e-obs">Observações</label>
         <textarea id="e-obs" class="input" name="observacoes">${esc(r.observacoes || "")}</textarea></div>
@@ -50,8 +50,10 @@ export function abrirEdicao(r) {
   const formulario = el.querySelector("#form-edicao");
   const seletorCentro = el.querySelector("#e-centro");
   let centroAnterior = r.centro_custo || "";
-  carregarCentros().then((lista) => { seletorCentro.innerHTML = opcoesCentro(lista, centroAnterior); }).catch(() => {});
-  seletorCentro.addEventListener("change", async () => { centroAnterior = await tratarNovoCentro(seletorCentro, centroAnterior); });
+  carregarCentros().then((lista) => { seletorCentro.innerHTML = opcoesCentro(lista, centroAnterior, { dividir: true }); }).catch(() => {});
+  seletorCentro.addEventListener("change", async () => {
+    centroAnterior = await tratarNovoCentro(seletorCentro, centroAnterior, () => parseValor(el.querySelector("#e-valor").value));
+  });
   const salvar = async (ignorarValidacao = false) => {
     const dados = Object.fromEntries(new FormData(formulario).entries());
     const valor = parseValor(dados.valor);

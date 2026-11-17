@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import os
-import re
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import Response
 
-from .. import acesso, admin
+from .. import acesso, admin, cost_center
 from .. import contexto as ctx
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -46,9 +45,18 @@ def concluir_caixa_de_entrada(arquivo_ids) -> None:
         contexto.caixa_entrada.marcar_lancados({i for i in arquivo_ids if i})
 
 
-def limpar_centro(dados: dict) -> None:
+def limpar_centro(dados: dict, atual: dict | None = None) -> None:
+    """Arruma o centro de custo que vai ser gravado. Com o valor dividido entre vários centros, a soma tem de dar o
+    valor do lançamento (``atual``: o registro que está sendo editado, para conferir quando só um dos dois muda)."""
+    texto = dados["centro_custo"] if "centro_custo" in dados else (atual or {}).get("centro_custo")
+    if "centro_custo" not in dados and len(cost_center.split_parts(texto)) < 2:
+        return
+    try:
+        limpo = cost_center.validate(texto, dados["valor"] if "valor" in dados else (atual or {}).get("valor"))
+    except ValueError as exc:
+        raise erro(422, "centro_invalido", str(exc)) from exc
     if "centro_custo" in dados:
-        dados["centro_custo"] = re.sub(r"\s+", " ", dados["centro_custo"] or "").strip()
+        dados["centro_custo"] = limpo
 
 
 def exigir_admin(request: Request) -> None:

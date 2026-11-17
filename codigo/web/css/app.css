@@ -1836,3 +1836,12 @@ button.diesel-precos:hover { border-color: var(--marca); }
   .dr-topo .alternar-modo { flex-wrap: wrap; }
   .dr-maquina-escolha .input { min-width: 0; flex: 1 1 100%; }
 }
+
+/* ------------------------------------------------------------------ Centro de custo: valor dividido entre centros */
+.split-row { display: grid; grid-template-columns: minmax(0, 1fr) 150px auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.split-summary { margin-top: 12px; font-weight: 600; }
+.split-summary.ok { color: var(--ok); }
+.split-summary.aviso { color: var(--aviso); }
+.tag-centro small { font-weight: 500; opacity: .8; }
+.tag-centro + .tag-centro { margin-left: 4px; }
+@media (max-width: 720px) { .split-row { grid-template-columns: minmax(0, 1fr) auto; } }

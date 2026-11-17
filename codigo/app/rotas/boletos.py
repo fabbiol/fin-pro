@@ -36,7 +36,7 @@ class BoletoBase(BaseModel):
     status: Status | None = None
     data_pagamento: date | None = None
     observacoes: str | None = Field(None, max_length=1000)
-    centro_custo: str | None = Field(None, max_length=60)
+    centro_custo: str | None = Field(None, max_length=900)  # um nome (até 60) ou o valor dividido entre centros
     valor_pago: float | None = Field(None, ge=0, le=1e11)
     juros_multa: float | None = Field(None, ge=0, le=1e11)
     desconto: float | None = Field(None, ge=0, le=1e11)
@@ -199,7 +199,7 @@ def lancar_lote(entrada: LoteEntrada, request: Request):
 
 @router.put("/api/boletos/{id_}")
 def editar_boleto(id_: int, entrada: BoletoEdicao, request: Request):
-    ctx.repositorio.obter(id_)
+    atual = ctx.repositorio.obter(id_)
     alteracoes = entrada.model_dump(exclude={"ignorar_validacao"}, exclude_unset=True)
     if "linha_digitavel" in alteracoes:
         alteracoes.update(dados_da_linha(alteracoes["linha_digitavel"], entrada.ignorar_validacao))
@@ -208,7 +208,7 @@ def editar_boleto(id_: int, entrada: BoletoEdicao, request: Request):
     for campo in ("beneficiario", "documento_beneficiario", "numero_documento", "observacoes", "centro_custo"):
         if campo in alteracoes and alteracoes[campo] is None:
             alteracoes[campo] = ""
-    limpar_centro(alteracoes)
+    limpar_centro(alteracoes, atual)
     registro, _ = ctx.repositorio.atualizar(id_, alteracoes, usuario=autor(request))
     return servicos.serializar(registro)
 
