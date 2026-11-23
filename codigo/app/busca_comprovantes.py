@@ -16,6 +16,7 @@ import zipfile
 from datetime import date, datetime
 
 from . import contexto as ctx
+from . import cost_center
 from .arquivos import RepositorioArquivos
 
 TIPOS = {
@@ -285,7 +286,7 @@ def buscar(pode=lambda _p: True, *, q: str = "", tipos: list[str] | None = None,
             continue
         if valor_max is not None and not any(v <= valor_max for v in valores):
             continue
-        if centro_normal and _normal(item["centro_custo"]) != centro_normal:
+        if centro_normal and centro_normal not in {_normal(nome) for nome in cost_center.names(item["centro_custo"])}:
             continue
         if pessoa_normal and pessoa_normal not in _normal(item["pessoa"]):
             continue

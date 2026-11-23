@@ -29,6 +29,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
+from . import cost_center
 from .planilha import (
     ABA_CENTROS, ABA_HISTORICO, ABAS, BACKUPS_MANTIDOS, CAMPOS_DATA, CAMPOS_DATA_HORA, CAMPOS_MOEDA, CENTROS_PADRAO,
     STATUS_VALIDOS, TIPOS_CHAVE, PlanilhaBloqueadaError, PlanilhaBoletos, RegistroNaoEncontrado, _estilizar_cabecalho,
@@ -311,13 +312,13 @@ class BancoBoletos:
                           (agora.isoformat(), acao, registro.get("id"), registro.get(definicao.campo_nome) or "",
                            venc.isoformat() if isinstance(venc, date) else None, valor, detalhes or "", usuario or ""))
 
-            def garantir_centro(nome) -> None:
-                nome = nome.strip() if isinstance(nome, str) else ""
-                if nome and self.centros and nome.lower() not in centros:
-                    ordem = c.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM centros").fetchone()[0]
-                    c.execute("INSERT OR IGNORE INTO centros (nome, descricao, ativo, criado_em, ordem) VALUES (?, '', 1, ?, ?)",
-                              (nome, agora.isoformat(), ordem))
-                    centros.add(nome.lower())
+            def garantir_centro(texto) -> None:  # um centro, ou cada centro de um valor dividido
+                for nome in cost_center.names(texto) if isinstance(texto, str) else []:
+                    if self.centros and nome.lower() not in centros:
+                        ordem = c.execute("SELECT COALESCE(MAX(ordem), 0) + 1 FROM centros").fetchone()[0]
+                        c.execute("INSERT OR IGNORE INTO centros (nome, descricao, ativo, criado_em, ordem) VALUES (?, '', 1, ?, ?)",
+                                  (nome, agora.isoformat(), ordem))
+                        centros.add(nome.lower())
 
             for operacao in operacoes:
                 aba = operacao.get("aba") or self.padrao
@@ -418,8 +419,9 @@ class BancoBoletos:
                 if anterior != nome:
                     for aba, id_, texto in c.execute("SELECT aba, id, dados FROM registros").fetchall():
                         registro = json.loads(texto)
-                        if isinstance(registro.get("centro_custo"), str) and registro["centro_custo"].strip().lower() == anterior.lower():
-                            registro["centro_custo"] = nome
+                        renomeado = cost_center.rename(registro.get("centro_custo"), anterior, nome)
+                        if renomeado is not None:
+                            registro["centro_custo"] = renomeado
                             c.execute("UPDATE registros SET dados = ? WHERE aba = ? AND id = ?", (json.dumps(registro, ensure_ascii=False), aba, id_))
                             atualizados += 1
                     detalhes = f"Renomeado de {anterior} para {nome} ({atualizados} lançamento(s) atualizado(s))"

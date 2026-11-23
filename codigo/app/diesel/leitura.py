@@ -17,7 +17,9 @@ from itertools import permutations
 
 from ..boleto.texto import extrair_data, normalizar
 from ..caixa.leitura import estabelecimento, valor_total
-from ..empresas.leitura import _linhas, _valores_do_texto, texto_do_arquivo
+from ..empresas.leitura import (
+    RE_NCM, _itens_em_varias_linhas, _linhas, _valores_do_texto, emitente_do_canhoto, texto_do_arquivo,
+)
 
 LIMITE_CANHOTO = 600.0  # acima disso, em litros, é compra (o estoque da semana), não o abastecimento de uma máquina
 PRECO_MINIMO, PRECO_MAXIMO = 2.0, 15.0  # faixa de preço do litro (separa o preço dos litros e do total)
@@ -153,6 +155,14 @@ def _total_do_rodape(linhas: list[str], rotulos: tuple[str, ...], alvo: float | 
 
 def itens_do_canhoto(texto: str) -> list[dict]:
     """Cada combustível do canhoto: {"combustivel", "descricao", "litros", "preco_litro", "valor", "conferido"}."""
+    if RE_NCM.search(texto or ""):
+        # DANFE do modelo novo: cada item em várias linhas, já conferido por litros × preço = total (sem isso, o NCM
+        # "27101921" do diesel virava litros)
+        nota = [i for i in _itens_em_varias_linhas(texto) if eh_linha_de_produto(i["material"])]
+        if nota:
+            return [{"combustivel": combustivel_do_texto(i["material"]), "descricao": i["material"][:60],
+                     "litros": round(i["quantidade"], 2), "preco_litro": round(i["valor_unitario"], 3),
+                     "valor": round(i["valor_total"], 2), "conferido": True} for i in nota][:10]
     linhas = _linhas(texto)
     itens = []
     for i, linha in enumerate(linhas):
@@ -251,6 +261,9 @@ def _posto(texto: str, tipo: str) -> str:
         return (len(re.findall(r"[a-z]", normal)) >= 4 and not any(r in normal for r in RUIDO_DO_BANCO)
                 and not (nossa and (nossa in normal or normal in nossa)) and "prospera" not in normal)
 
+    emitente = emitente_do_canhoto(texto)  # DANFE: o canhoto diz quem emitiu
+    if emitente and aceitavel(emitente):
+        return emitente
     for linha in linhas[:12]:
         if re.search(r"\bposto\b", normalizar(linha)) and aceitavel(linha):
             return re.sub(r"\s+", " ", linha).strip()[:80]

@@ -34,7 +34,7 @@ class PixBase(BaseModel):
     chave: str | None = Field(None, max_length=120)
     valor: float | None = Field(None, ge=0, le=1e11)
     vencimento: date | None = None
-    centro_custo: str | None = Field(None, max_length=60)
+    centro_custo: str | None = Field(None, max_length=900)  # um nome (até 60) ou o valor dividido entre centros
     descricao: str | None = Field(None, max_length=500)
     status: Status | None = None
     data_pagamento: date | None = None
@@ -107,7 +107,7 @@ def preparar_pix(entrada: PixBase, existente: dict | None = None) -> dict:
     for campo in ("recebedor", "descricao", "observacoes", "txid"):
         if isinstance(dados.get(campo), str):
             dados[campo] = dados[campo].strip()
-    limpar_centro(dados)
+    limpar_centro(dados, existente)
     return dados
 
 

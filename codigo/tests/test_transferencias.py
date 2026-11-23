@@ -897,6 +897,24 @@ def test_comprovante_do_cartao_fica_guardado_na_nota(tela):
     assert tela.get(f"/api/transferencias/{nota['id']}/cartao").status_code == 200
 
 
+def test_limpeza_de_temporarios_nao_apaga_o_pdf_da_nota_nem_o_comprovante_do_cartao(tela):
+    """A limpeza roda cada vez que o sistema abre e apaga os arquivos antigos que nenhum lançamento usa."""
+    import os
+    import time
+
+    assert _enviar(tela, origem_id="9", nota="900", pagamentos=PIX_E_CARTAO).status_code == 201
+    nota = _linhas(tela)["900"]
+    tela.post(f"/api/transferencias/{nota['id']}/cartao", files={"arquivo": ("cartao.pdf", _pdf_texto("Cartao"), "application/pdf")})
+    solto = contexto.arquivos.salvar(_pdf_texto("Enviado e nunca usado"), "solto.pdf")
+    antigo = time.time() - 3 * 86400
+    for arquivo in contexto.arquivos.pasta.iterdir():
+        os.utime(arquivo, (antigo, antigo))
+    main._limpar_temporarios()
+    assert tela.get(f"/api/transferencias/{nota['id']}/pdf").status_code == 200
+    assert tela.get(f"/api/transferencias/{nota['id']}/cartao").status_code == 200
+    assert contexto.arquivos.meta(solto["id"]) is None  # o que ninguém usa continua sendo limpo
+
+
 # --------------------------------------------------------------------------- venda paga depois (prefeitura)
 
 

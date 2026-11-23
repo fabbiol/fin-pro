@@ -272,8 +272,86 @@ def _rotulo(linhas: list[str], padrao: str, janela: int = 2) -> str:
     return ""
 
 
+RE_NCM = re.compile(r"\[?\s*NCM\s*:?\s*(\d{4}\.?\d{2}\.?\d{2})\s*\]?", re.I)
+RE_IMPOSTO = re.compile(r"\b(ICMS|IBS|CBS|IPI|IS|PIS|COFINS|FCP|ISSQN)\b", re.I)
+RE_CODIGO_DO_PRODUTO = re.compile(r"^(?=[\w.\-/]*\d)[\w.\-/]{1,20}\s+-\s+(?=\S)")
+RE_CPF = re.compile(r"(?<!\d)\d{3}\.\d{3}\.\d{3}-\d{2}(?!\d)")
+
+
+def _unidade(texto: str) -> str:
+    return texto.upper().replace(" ", "").replace("M3", "M³")
+
+
+def _descricao_do_item(linhas: list[str], ancora: int, antes_do_ncm: str) -> str:
+    """Descrição de um item do DANFE novo: a(s) linha(s) logo acima do ``[NCM ...]``, sem o código do produto."""
+    partes = [antes_do_ncm] if antes_do_ncm else []
+    j = ancora - 1
+    while not partes or not RE_CODIGO_DO_PRODUTO.match(partes[0]):
+        if j < 0 or len(partes) >= 3:
+            break
+        linha = linhas[j]
+        normal = normalizar(linha)
+        if (RE_IMPOSTO.match(linha) or normal.startswith(("descricao", "codigo", "dados do produto", "cst", "cfop"))
+                or RE_NCM.search(linha) or (re.match(r"^[\d.,%/\s]+", linha) and not RE_CODIGO_DO_PRODUTO.match(linha))
+                or RE_UNIDADE.fullmatch(linha) or len(re.findall(r"[A-Za-zÀ-ÿ]", linha)) < 2):
+            break
+        partes.insert(0, linha)
+        j -= 1
+    descricao = RE_CODIGO_DO_PRODUTO.sub("", " ".join(partes)).strip(" .-")
+    return descricao if len(re.findall(r"[A-Za-zÀ-ÿ]", descricao)) >= 2 else ""
+
+
+def _itens_em_varias_linhas(texto: str) -> list[dict]:
+    """Itens do DANFE da Reforma Tributária, em que cada item ocupa várias linhas::
+
+        2000000000202 - BRITA 01 COMERCIAL
+        [NCM 25171000]
+        CST 020
+        CFOP 5101
+        7,000
+        M3
+        158,80 1111,60 ICMS 196,20
+        IBS / CBS ...
+
+    O ``[NCM ...]`` marca cada item: a descrição vem acima; quantidade, unidade, valor unitário e valor total vêm
+    abaixo, antes dos impostos. Vale o trio de números que fecha a conta quantidade × unitário = total.
+    """
+    linhas = _linhas(texto)
+    ancoras = [(i, m) for i, linha in enumerate(linhas) for m in [RE_NCM.search(linha)] if m]
+    itens = []
+    for n, (i, m) in enumerate(ancoras):
+        fim = min(ancoras[n + 1][0] if n + 1 < len(ancoras) else len(linhas), i + 10)
+        janela = [linhas[i][m.end():]] + [l for l in linhas[i + 1:fim] if not re.match(r"^(CST|CFOP)\b", l, re.I)]
+        valores = " ".join(janela)
+        imposto = RE_IMPOSTO.search(valores)
+        if imposto:
+            valores = valores[:imposto.start()]
+        sem_unidade = RE_UNIDADE.sub(" ", valores)  # o "3" do "M3" não é número do item
+        numeros = [v for v in (_numero(x.group(1)) for x in RE_NUMERO.finditer(sem_unidade)) if v is not None]
+        trio = next(((q, u, t) for q, u, t in zip(numeros, numeros[1:], numeros[2:])
+                     if q and t and abs(q * u - t) <= max(0.05, t * 0.02)), None)
+        if not trio:
+            continue
+        unidade = RE_UNIDADE.search(valores)
+        quantidade, unitario, total = trio
+        itens.append({
+            "material": _descricao_do_item(linhas, i, linhas[i][:m.start()].strip())[:80],
+            "unidade": _unidade(unidade.group(1)) if unidade else "",
+            "quantidade": round(quantidade, 4),
+            "valor_unitario": round(unitario, 4),
+            "valor_total": round(total, 2),
+            "pedido": "",
+        })
+    return itens
+
+
 def _itens_do_texto(texto: str) -> list[dict]:
-    """Itens do DANFE: depois da unidade vêm quantidade, valor unitário e valor total."""
+    """Itens do DANFE. No modelo novo (Reforma Tributária) cada item ocupa várias linhas, marcadas pelo
+    ``[NCM ...]``; no modelo antigo o item é uma linha só, com quantidade, valor unitário e total depois da unidade."""
+    if RE_NCM.search(texto or ""):
+        itens = _itens_em_varias_linhas(texto)
+        if itens:
+            return itens
     itens = []
     for linha in _linhas(texto):
         if len(linha) < 12 or normalizar(linha).startswith(("codigo", "descricao", "dados do produto")):
@@ -295,7 +373,7 @@ def _itens_do_texto(texto: str) -> list[dict]:
             descricao = ""  # sobrou só número: o nome do material vai ser conferido na tela
         itens.append({
             "material": descricao[:80],
-            "unidade": m.group(1).upper().replace(" ", "").replace("M3", "M³"),
+            "unidade": _unidade(m.group(1)),
             "quantidade": round(quantidade, 4),
             "valor_unitario": round(unitario, 4),
             "valor_total": round(total, 2),
@@ -304,9 +382,15 @@ def _itens_do_texto(texto: str) -> list[dict]:
     return itens
 
 
-RE_SO_ROTULO = re.compile(r"^(nome|razao social|nome/razao social|cnpj|cpf|cnpj/cpf|endereco|municipio|uf|fone|fax|"
+RE_SO_ROTULO = re.compile(r"^(nome|razao social|nome/razao social|cnpj|cpf|cnpj/cpf|endereco|municipio|uf|fone|fax( uf)?|"
                           r"bairro|distrito|cep|inscricao estadual|data da emissao|data de emissao|destinatario.*|"
-                          r"identificacao do emitente|natureza da operacao|hora de saida|data de saida)\W*$")
+                          r"remetente|identificacao do emitente|natureza da operacao|hora de saida|data de saida|"
+                          r"data de entrada|saida)\W*$")
+
+
+def _so_rotulo(texto: str) -> bool:
+    """Linha que é só o rótulo do DANFE: "NOME/RAZÃO SOCIAL" ou, no modelo novo, "NOME / RAZÃO SOCIAL"."""
+    return all(RE_SO_ROTULO.match(parte.strip()) for parte in normalizar(texto).split("/"))
 
 
 def _bloco_do_destinatario(linhas: list[str]) -> list[str]:
@@ -319,9 +403,16 @@ def _bloco_do_destinatario(linhas: list[str]) -> list[str]:
 def _nome_de_empresa(linha: str) -> str:
     """Nome de empresa numa linha do DANFE (sem o CNPJ colado e sem confundir com o rótulo)."""
     limpo = re.sub(r"\s*\d{2}\.?\d{3}\.?\d{3}\s?/\s?\d{4}-?\d{2}.*$", "", linha or "").strip(" :-|")
-    if RE_SO_ROTULO.match(normalizar(limpo)) or len(re.findall(r"[A-Za-z\u00c0-\u00ff]", limpo)) < 5:
+    if _so_rotulo(limpo) or len(re.findall(r"[A-Za-z\u00c0-\u00ff]", limpo)) < 5:
         return ""
     return limpo[:80]
+
+
+def emitente_do_canhoto(texto: str) -> str:
+    """Quem emitiu o DANFE, pelo canhoto: "RECEBEMOS DE <EMITENTE> OS PRODUTOS ..." (o nome pode quebrar a linha)."""
+    texto = re.sub(r"\s+", " ", texto or "")
+    m = re.search(r"\brecebemos de (.{3,100}?) os produtos\b", normalizar(texto))
+    return texto[m.start(1):m.end(1)].strip(" :-")[:80] if m else ""
 
 
 def _numero_pela_chave(texto: str) -> str:
@@ -355,19 +446,24 @@ def extrair_nota(texto: str) -> dict:
     documentos = [re.sub(r"\D", "", m.group(0)) for m in RE_CNPJ.finditer(texto or "")]
     bloco = _bloco_do_destinatario(linhas)
     destinatario_nome = next((n for n in (_nome_de_empresa(l) for l in bloco) if n), "")
-    doc_destinatario = [re.sub(r"\D", "", m.group(0)) for l in bloco for m in RE_CNPJ.finditer(l)] or documentos[1:2]
+    # cliente pessoa física: o DANFE traz o CPF no lugar do CNPJ
+    doc_destinatario = ([re.sub(r"\D", "", m.group(0)) for l in bloco for m in RE_CNPJ.finditer(l)]
+                        or [re.sub(r"\D", "", m.group(0)) for l in bloco for m in RE_CPF.finditer(l)] or documentos[1:2])
     if not destinatario_nome:
-        destinatario_nome = _nome_de_empresa(_rotulo(linhas, r"^(nome/razao social|destinatario|cliente)\b"))
+        destinatario_nome = _nome_de_empresa(_rotulo(linhas, r"^(nome ?/ ?razao social|destinatario|cliente)\b"))
 
     itens = _itens_do_texto(texto)
-    total = _numero(_rotulo(linhas, r"valor total da nota")) or round(sum(i["valor_total"] for i in itens), 2)
+    # "VALOR TOTAL DA NOTA" no DANFE antigo; "V. TOTAL DA NOTA" no da Reforma Tributária
+    total = _numero(_rotulo(linhas, r"(valor|v\.?) total da nota")) or round(sum(i["valor_total"] for i in itens), 2)
     pedidos = numeros_de_pedido(texto)
+    serie = re.search(r"\bserie\s*[:.]?\s*(\d{1,3})\b", normalizar(texto or ""))
+    emitente = emitente_do_canhoto(texto) or _nome_de_empresa(linhas[0] if linhas else "")
     return {
         "origem": "texto",
         "numero_nf": (numero_nf or "").lstrip("0"),
-        "serie": "",
+        "serie": serie.group(1) if serie else "",
         "data": data,
-        "emitente": {"nome": (linhas[0] if linhas else "")[:80], "cnpj": documentos[0] if documentos else ""},
+        "emitente": {"nome": emitente[:80], "cnpj": documentos[0] if documentos else ""},
         "destinatario": {"nome": (destinatario_nome or "")[:80], "cnpj": doc_destinatario[0] if doc_destinatario else ""},
         "valor_total": total,
         "itens": itens,

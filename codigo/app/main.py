@@ -55,8 +55,9 @@ def _limpar_temporarios() -> None:
         for aba in ("compras", "abastecimentos"):  # comprovantes e canhotos do diesel
             for registro in contexto.diesel.listar(aba):
                 referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
-        for registro in contexto.transferencias.listar():  # PDFs das notas enviadas pela Operações
-            referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("arquivo")))
+        for registro in contexto.transferencias.listar():  # PDFs das notas da Operações e comprovantes do cartão
+            for campo in ("arquivo", "comprovante_cartao"):
+                referenciados.add(RepositorioArquivos.id_de_caminho(registro.get(campo)))
         for registro in contexto.transferencias.listar("pagamentos"):  # comprovantes ligados às notas (e os desfeitos)
             referenciados.add(RepositorioArquivos.id_de_caminho(registro.get("comprovante")))
         if contexto.caixa_entrada is not None:

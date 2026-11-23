@@ -28,6 +28,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
+from . import cost_center
 from .importacao import ler_valor
 
 ABA_BOLETOS = "Boletos"
@@ -698,17 +699,15 @@ class PlanilhaBoletos:
                                    "excluir": []}
                 return abas[chave]
 
-            def garantir_centro(nome) -> None:
-                nome = (nome or "").strip() if isinstance(nome, str) else ""
-                if not nome:
-                    return
-                if "ws" not in centros:
-                    centros["ws"] = self._garantir_centros(wb)
-                    centros["nomes"] = {str(l[0]).strip().lower() for l in centros["ws"].iter_rows(min_row=2, values_only=True) if l and l[0]}
-                if nome.lower() not in centros["nomes"]:
-                    centros["ws"].append([nome, None, "Sim", agora])
-                    centros["ws"].cell(row=centros["ws"].max_row, column=4).number_format = "dd/mm/yyyy hh:mm"
-                    centros["nomes"].add(nome.lower())
+            def garantir_centro(texto) -> None:  # um centro, ou cada centro de um valor dividido
+                for nome in cost_center.names(texto) if isinstance(texto, str) else []:
+                    if "ws" not in centros:
+                        centros["ws"] = self._garantir_centros(wb)
+                        centros["nomes"] = {str(l[0]).strip().lower() for l in centros["ws"].iter_rows(min_row=2, values_only=True) if l and l[0]}
+                    if nome.lower() not in centros["nomes"]:
+                        centros["ws"].append([nome, None, "Sim", agora])
+                        centros["ws"].cell(row=centros["ws"].max_row, column=4).number_format = "dd/mm/yyyy hh:mm"
+                        centros["nomes"].add(nome.lower())
 
             resultados: list[dict] = []
             for operacao in operacoes:
@@ -874,8 +873,9 @@ class PlanilhaBoletos:
                         coluna = self._garantir_colunas(aba_ws, definicao)["centro_custo"]
                         for numero in range(2, aba_ws.max_row + 1):
                             celula = aba_ws.cell(row=numero, column=coluna)
-                            if isinstance(celula.value, str) and celula.value.strip().lower() == anterior.lower():
-                                celula.value = nome
+                            renomeado = cost_center.rename(celula.value, anterior, nome) if isinstance(celula.value, str) else None
+                            if renomeado is not None:
+                                celula.value = renomeado
                                 atualizados += 1
                     detalhes = f"Renomeado de {anterior} para {nome} ({atualizados} lançamento(s) atualizado(s))"
                 else:

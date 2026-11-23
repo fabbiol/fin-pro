@@ -22,6 +22,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from . import cost_center
 from .pix import formatar_chave
 
 MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro",
@@ -98,13 +99,12 @@ def montar(boletos: list[dict], pix: list[dict], mes: date, base: str = "vencime
     abertos = [i for i in itens if i["status"] == "Pendente"]
     cancelados = [i for i in itens if i["status"] == "Cancelado"]
     centros: dict[str, dict] = defaultdict(lambda: {"pago": 0.0, "em_aberto": 0.0, "quantidade": 0})
-    for i in pagos + abertos:
-        centro = centros[i["centro_custo"]]
-        if i["status"] == "Pago":
-            centro["pago"] += i["valor_pago"]
-        else:
-            centro["em_aberto"] += i["valor"]
-        centro["quantidade"] += 1
+    for i in pagos + abertos:  # com o valor dividido, cada centro fica com a sua parte
+        pago = i["status"] == "Pago"
+        for nome, parte in cost_center.allocate(i["centro_custo"], (i["valor_pago"] if pago else i["valor"]) or 0):
+            centro = centros[nome]
+            centro["pago" if pago else "em_aberto"] += parte
+            centro["quantidade"] += 1
     por_centro = sorted(({"centro_custo": nome, "pago": round(v["pago"], 2), "em_aberto": round(v["em_aberto"], 2),
                           "total": round(v["pago"] + v["em_aberto"], 2), "quantidade": v["quantidade"]}
                          for nome, v in centros.items()), key=lambda c: -c["total"])

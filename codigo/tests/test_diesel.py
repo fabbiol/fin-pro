@@ -132,6 +132,40 @@ def test_le_o_comprovante_da_compra_e_a_legenda_decide():
     assert leitura.analisar_texto("foto borrada")["tipo"] == ""  # não sabe: o bot pergunta
 
 
+# DANFE do modelo novo (Reforma Tributária) da compra de diesel: cada item em várias linhas. Dados fictícios.
+DANFE_DIESEL = """RECEBEMOS DE AUTO POSTO EXEMPLO LTDA OS PRODUTOS/SERVIÇOS CONSTANTES DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO NF-e
+DANFE
+DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA
+DESTINATÁRIO / REMETENTE
+NOME / RAZÃO SOCIAL
+PROSPERA INDUSTRIA COMERCIO E SERVICOS LTDA
+DATA DE EMISSÃO
+19/11/2026
+VALOR TOTAL DA NOTA
+6.190,00
+DADOS DOS PRODUTOS / SERVIÇOS
+DESCRIÇÃO DO PRODUTO / SERVIÇO CST / CFOP QTD / UN VLR UNIT VLR TOTAL
+000123 - OLEO DIESEL B S10 ADITIVADO
+[NCM 27101921]
+CST . . . . . . . . . . . .
+CFOP . . . . . . . . . . . .
+1.000,0000
+[L]
+6,1900 6.190,00 ICMS . . . . . . . . . . . .
+IBS / CBS . . . . . . . . . .
+DADOS ADICIONAIS
+"""
+
+
+def test_le_a_nota_fiscal_nova_da_compra_de_diesel():
+    lido = leitura.analisar_texto(DANFE_DIESEL, "compra", hoje=date(2026, 11, 30))
+    # o NCM 27101921 não pode virar litros
+    assert lido["itens"] == [{"combustivel": "Diesel S10", "descricao": "OLEO DIESEL B S10 ADITIVADO", "litros": 1000.0,
+                              "preco_litro": 6.19, "valor": 6190.0, "conferido": True}]
+    assert lido["litros"] == 1000.0 and lido["valor"] == 6190.0 and lido["preco_litro"] == 6.19
+    assert lido["posto"] == "AUTO POSTO EXEMPLO LTDA" and lido["data"] == date(2026, 11, 19)
+
+
 # --------------------------------------------------------------------------- bot
 
 

@@ -1,6 +1,6 @@
 // Tela: Comprovantes — acha o comprovante de boletos, Pix, cheques, recebimentos, caixa e notas fiscais.
 import { api } from "../api.js";
-import { carregarCentros } from "../centros.js";
+import { carregarCentros, costCenterTags } from "../centros.js";
 import { anexarComprovante } from "../detalhes.js";
 import { pode } from "../estado.js";
 import { icone } from "../icons.js";
@@ -202,7 +202,7 @@ function desenharTabela(itens) {
       <td data-rotulo="Nome" class="celula-benef"><strong title="${esc(i.nome)}">${esc(i.nome || "—")}</strong><span>${esc(i.detalhe || "")}</span></td>
       <td data-rotulo="Número">${i.numero ? `<span class="mono">${ROTULO_NUMERO[i.tipo] ? `<small class="sutil">${ROTULO_NUMERO[i.tipo]}</small> ` : ""}${esc(i.numero)}</span>` : `<span class="sutil">—</span>`}</td>
       ${celulaValor(i)}
-      <td data-rotulo="Centro de custo">${i.centro_custo ? `<span class="tag-centro">${icone("etiqueta", 11)}${esc(i.centro_custo)}</span>` : ""}</td>
+      <td data-rotulo="Centro de custo">${costCenterTags(i.centro_custo)}</td>
       <td data-rotulo="Quem">${esc(i.pessoa || "")}</td>
       <td class="col-acoes">${acoes(i, indice)}</td></tr>`).join("")}</tbody></table>`;
 }

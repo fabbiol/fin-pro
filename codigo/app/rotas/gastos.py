@@ -8,7 +8,7 @@ from typing import Literal
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
-from .. import fechamento, servicos
+from .. import cost_center, fechamento, servicos
 from ..arquivos import RepositorioArquivos
 from .. import contexto as ctx
 from .comum import XLSX, anexo, autor, erro
@@ -31,12 +31,14 @@ def listar_centros():
     uso: dict[str, dict] = {}
     for origem, repo in (("boletos", ctx.repositorio), ("pix", ctx.repositorio_pix), ("dinheiro", ctx.repositorio_caixa)):
         for r in repo.listar():
-            nome = (r.get("centro_custo") or "").strip()
-            if not nome or r.get("status") == "Cancelado" or (origem == "dinheiro" and r.get("movimento") != "Saída"):
+            if r.get("status") == "Cancelado" or (origem == "dinheiro" and r.get("movimento") != "Saída"):
                 continue
-            item = uso.setdefault(nome.lower(), {"nome": nome, "boletos": 0, "pix": 0, "dinheiro": 0, "total": 0.0})
-            item[origem] += 1
-            item["total"] += float(r.get("valor") or 0)
+            for nome, parte in cost_center.allocate(r.get("centro_custo"), float(r.get("valor") or 0)):
+                if not nome:
+                    continue
+                item = uso.setdefault(nome.lower(), {"nome": nome, "boletos": 0, "pix": 0, "dinheiro": 0, "total": 0.0})
+                item[origem] += 1
+                item["total"] += parte
     centros = ctx.planilha.listar_centros()
     conhecidos = {c["nome"].lower() for c in centros}
     centros += [{"nome": u["nome"], "descricao": "", "ativo": True} for chave, u in uso.items() if chave not in conhecidos]

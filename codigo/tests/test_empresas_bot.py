@@ -9,7 +9,9 @@ from app import contexto
 from app.empresas import bot, servico
 from app.empresas.entrada import CaixaNotas
 from app.notificacoes import canais
-from test_empresas_leitura import CHEQUE, CHEQUE_FOTO, COMPROVANTE_PIX, PRINT_FECHAMENTO, XML_NFE
+from test_empresas_leitura import (
+    CHEQUE, CHEQUE_FOTO, COMPROVANTE_PIX, DANFE_REFORMA_PONTILHADO, PRINT_FECHAMENTO, XML_NFE,
+)
 
 
 def _pdf(texto: str) -> bytes:
@@ -83,6 +85,16 @@ def test_empresa_nova_e_cadastrada_sozinha_ao_receber_a_nota(caixa):
     assert item["estado"] == "lancado"
     empresa = servico.empresas()[0]
     assert empresa["nome"] == "IMAPAL CONSTRUCOES LTDA" and empresa["cnpj"] == "12.345.678/0001-95"
+
+
+def test_danfe_novo_em_pdf_e_lancado_com_o_cliente_certo(caixa):
+    """DANFE da Reforma Tributária: o cliente sai pelo nome e CNPJ, nunca pelo rótulo "NOME / RAZÃO SOCIAL"."""
+    item = caixa.receber(_pdf(DANFE_REFORMA_PONTILHADO), "NF 7310.pdf")
+    assert item["estado"] == "lancado", item.get("resumo")
+    empresa = servico.empresas()[0]
+    assert empresa["nome"] == "CONSTRUTORA EXEMPLO LTDA" and empresa["cnpj"] == "98.765.432/0001-10"
+    assert [(n["numero_nf"], n["material"], n["quantidade"], n["valor_total"], n["pedido"])
+            for n in contexto.empresas.listar("notas")] == [("7310", "PEDRISCO COMERCIAL", 4.0, 635.2, "7521")]
 
 
 # --------------------------------------------------------------------------- comprovantes e cheques
