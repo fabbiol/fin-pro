@@ -382,9 +382,15 @@ def _itens_do_texto(texto: str) -> list[dict]:
     return itens
 
 
-RE_SO_ROTULO = re.compile(r"^(nome|razao social|nome/razao social|cnpj|cpf|cnpj/cpf|endereco|municipio|uf|fone|fax|"
+RE_SO_ROTULO = re.compile(r"^(nome|razao social|nome/razao social|cnpj|cpf|cnpj/cpf|endereco|municipio|uf|fone|fax( uf)?|"
                           r"bairro|distrito|cep|inscricao estadual|data da emissao|data de emissao|destinatario.*|"
-                          r"identificacao do emitente|natureza da operacao|hora de saida|data de saida)\W*$")
+                          r"remetente|identificacao do emitente|natureza da operacao|hora de saida|data de saida|"
+                          r"data de entrada|saida)\W*$")
+
+
+def _so_rotulo(texto: str) -> bool:
+    """Linha que é só o rótulo do DANFE: "NOME/RAZÃO SOCIAL" ou, no modelo novo, "NOME / RAZÃO SOCIAL"."""
+    return all(RE_SO_ROTULO.match(parte.strip()) for parte in normalizar(texto).split("/"))
 
 
 def _bloco_do_destinatario(linhas: list[str]) -> list[str]:
@@ -397,7 +403,7 @@ def _bloco_do_destinatario(linhas: list[str]) -> list[str]:
 def _nome_de_empresa(linha: str) -> str:
     """Nome de empresa numa linha do DANFE (sem o CNPJ colado e sem confundir com o rótulo)."""
     limpo = re.sub(r"\s*\d{2}\.?\d{3}\.?\d{3}\s?/\s?\d{4}-?\d{2}.*$", "", linha or "").strip(" :-|")
-    if RE_SO_ROTULO.match(normalizar(limpo)) or len(re.findall(r"[A-Za-z\u00c0-\u00ff]", limpo)) < 5:
+    if _so_rotulo(limpo) or len(re.findall(r"[A-Za-z\u00c0-\u00ff]", limpo)) < 5:
         return ""
     return limpo[:80]
 
@@ -444,7 +450,7 @@ def extrair_nota(texto: str) -> dict:
     doc_destinatario = ([re.sub(r"\D", "", m.group(0)) for l in bloco for m in RE_CNPJ.finditer(l)]
                         or [re.sub(r"\D", "", m.group(0)) for l in bloco for m in RE_CPF.finditer(l)] or documentos[1:2])
     if not destinatario_nome:
-        destinatario_nome = _nome_de_empresa(_rotulo(linhas, r"^(nome/razao social|destinatario|cliente)\b"))
+        destinatario_nome = _nome_de_empresa(_rotulo(linhas, r"^(nome ?/ ?razao social|destinatario|cliente)\b"))
 
     itens = _itens_do_texto(texto)
     # "VALOR TOTAL DA NOTA" no DANFE antigo; "V. TOTAL DA NOTA" no da Reforma Tributária

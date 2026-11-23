@@ -267,6 +267,78 @@ def test_le_o_danfe_novo_da_reforma_tributaria():
     ]
 
 
+# Outra disposição do DANFE novo: o CST/CFOP saem soltos no começo do texto, a unidade vem entre colchetes, os
+# impostos têm pontilhado e os rótulos têm espaço em volta da barra ("NOME / RAZÃO SOCIAL"). Dados fictícios.
+DANFE_REFORMA_PONTILHADO = """020
+5101
+112,11
+0,00
+ICMS . . . 1. 7. ,.0.0.%. ./ .C.B.S. ..........................
+IBS MUN . . . . . . ./ .IS. ...................................
+RECEBEMOS DE PROSPERA INDUSTRIA COMERCIO E SERVICOS LTDA OS PRODUTOS/SERVIÇOS CONSTANTES DA NOTA FISCAL ELETRÔNICA INDICADA AO LADO NF-e
+Nº 7310
+SÉRIE 1
+PROSPERA INDUSTRIA COMERCIO E
+SERVICOS LTDA
+DANFE
+DOCUMENTO AUXILIAR DA NOTA FISCAL
+ELETRÔNICA
+0 - ENTRADA 1 - SAÍDA
+Nº 7310
+SÉRIE 1 FOLHA 1/1
+CHAVE DE ACESSO
+5126 1103 8809 8500 0185 5500 1000 0073 1011 2345 6789
+INSCRIÇÃO ESTADUAL DO SUBSTITUTO TRIBUTÁRIO CNPJ / CPF
+03.880.985/0001-85
+DESTINATÁRIO / REMETENTE
+NOME / RAZÃO SOCIAL
+CONSTRUTORA EXEMPLO LTDA
+CNPJ / CPF
+98.765.432/0001-10
+DATA DE EMISSÃO
+19/11/2026
+BAIRRO / DISTRITO
+CENTRO
+FONE / FAX UF
+MT
+TOTAL DOS PRODUTOS E TOTAL DA NOTA
+VALOR TOTAL DOS PRODUTOS
+635,20
+VALOR TOTAL DA NOTA
+635,20
+TOTAL DO IBS / CBS / IS
+DADOS DOS PRODUTOS / SERVIÇOS
+DESCRIÇÃO DO PRODUTO / SERVIÇO CST / CFOP QTD / UN VLR UNIT VLR TOTAL BASES DE CÁLCULO ALÍQUOTAS VALOR DOS TRIBUTOS
+2000000000201 - PEDRISCO COMERCIAL
+[NCM 25171000]
+CST . . . . . . . . . . . . . . . . . . . . . . . . .
+CFOP . . . . . . . . . . . . . . . . . . . . . . . . .
+4,000
+[M3]
+158,80 635,20 ICMS . . . . . . . . . . . . . . . . . .
+IBS / CBS . . . . . . . . . . . . . . . . . . . . . .
+IS . . . . . . . . . . . . . . . . . . . . . . . . .
+IPI . . . . . . . . . . . . . . . . . . . . . . . . .
+DADOS ADICIONAIS
+INFORMAÇÕES COMPLEMENTARES
+Pedido: 7521; Documento fiscal emitido com reducao de base de calculo
+RESERVADO AO FISCO
+"""
+
+
+def test_le_o_danfe_novo_com_pontilhado_e_rotulos_com_barra_espacada():
+    nota = leitura.extrair_nota(DANFE_REFORMA_PONTILHADO)
+    assert nota["numero_nf"] == "7310" and nota["serie"] == "1" and nota["data"] == date(2026, 11, 19)
+    # o rótulo "NOME / RAZÃO SOCIAL" não pode virar o nome do cliente
+    assert nota["destinatario"] == {"nome": "CONSTRUTORA EXEMPLO LTDA", "cnpj": "98765432000110"}
+    assert nota["valor_total"] == 635.20 and nota["pedidos"] == ["7521"] and nota["confianca"] >= 0.8
+    assert nota["itens"] == [{"material": "PEDRISCO COMERCIAL", "unidade": "M³", "quantidade": 4.0,
+                              "valor_unitario": 158.8, "valor_total": 635.2, "pedido": ""}]
+    for rotulo in ("NOME / RAZÃO SOCIAL", "CNPJ / CPF", "BAIRRO / DISTRITO", "FONE / FAX UF", "DESTINATÁRIO / REMETENTE"):
+        assert leitura._nome_de_empresa(rotulo) == "", rotulo
+    assert leitura._nome_de_empresa("SILVA S/A MATERIAIS") == "SILVA S/A MATERIAIS"  # barra no nome continua
+
+
 def test_danfe_novo_no_caixa_le_o_total_da_nota_e_quem_emitiu():
     from app.caixa.leitura import analisar_texto
 
