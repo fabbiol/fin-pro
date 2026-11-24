@@ -1163,7 +1163,7 @@ body.arrastando .soltar-overlay { display: grid; }
   .toasts { left: 12px; right: 12px; align-items: stretch; }
   /* Transferências: com notas marcadas, o "Ligar pagamento" fica preso embaixo da tela, longe da lista comprida */
   .lp-lote:not([hidden]) { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; border-top: 1px solid var(--borda); box-shadow: 0 -6px 18px rgba(0, 0, 0, .18); }
-  .tabela-card:has(.lp-lote:not([hidden])) { margin-bottom: 72px; }
+  .tabela-card:has(.lp-lote:not([hidden])) { margin-bottom: 120px; }  /* a barra pode ter duas linhas de botões */
 }
 
 /* ------------------------------------------------------------------ Pix */
@@ -1376,6 +1376,14 @@ body.arrastando .soltar-overlay { display: grid; }
 .lp-campos { margin-top: 14px; }
 .lp-campos > :empty { display: none; }
 .lp-link-nota { white-space: nowrap; }
+.lp-juntar { margin-top: 8px; }
+/* Juntar a nota que chegou depois a um pagamento já ligado: a lista dos pagamentos para escolher */
+.jp-lista { max-height: min(50vh, 440px); overflow-y: auto; margin: 10px 0 12px; }
+.jp-opcao { flex-wrap: wrap; }  /* no celular, a sobra e o "ver comprovante" descem para baixo do texto */
+.jp-opcao:has(input:checked) { border-color: var(--marca); background: var(--marca-suave); }
+.jp-texto { display: flex; flex-direction: column; gap: 2px; flex: 1 1 220px; min-width: 0; }
+.jp-texto .sutil { font-size: 12.5px; overflow-wrap: anywhere; }
+.jp-opcao .chip { flex-shrink: 0; }
 .tabela .lp-situacao { min-width: 190px; }
 
 /* Transferências de clientes · Pix recebidos no Bradesco: sugestões, conferir e o resto */

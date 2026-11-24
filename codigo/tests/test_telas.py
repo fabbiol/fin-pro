@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 RAIZ = Path(__file__).resolve().parent.parent
+TOKEN_OPERACOES = "token-dos-testes-de-tela"  # a Operações manda as notas das Transferências com este token
 pytest.importorskip("playwright", reason="Playwright não instalado")
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -37,7 +38,8 @@ def sistema():
     pasta = Path(tempfile.mkdtemp(prefix="leitor-telas-"))
     porta = _porta_livre()
     ambiente = {**os.environ, "LEITOR_DADOS_DIR": str(pasta), "LEITOR_PORT": str(porta),
-                "LEITOR_NOTIFICACOES_AUTOMATICAS": "0", "LEITOR_BACKUP_AUTOMATICO": "0", "LEITOR_ABRIR_NAVEGADOR": "0"}
+                "LEITOR_NOTIFICACOES_AUTOMATICAS": "0", "LEITOR_BACKUP_AUTOMATICO": "0", "LEITOR_ABRIR_NAVEGADOR": "0",
+                "OPERACOES_TOKEN": TOKEN_OPERACOES}
     processo = subprocess.Popen([sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(porta)],
                                 cwd=RAIZ, env=ambiente, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     url = f"http://127.0.0.1:{porta}"
@@ -202,4 +204,49 @@ def test_empresas_importa_o_print_do_fechamento_e_da_baixa(pagina, sistema, tmp_
     pagina.wait_for_selector(".tabela-fechamento", timeout=20_000)
     resumo = _texto(pagina, ".fechamento-resumo")
     assert "R$ 1.905,60" in resumo and "R$ 7.622,40" in resumo  # já recebido e o que falta
+    assert not pagina.erros, pagina.erros
+
+
+def test_transferencias_junta_a_nota_que_chegou_depois(pagina, tmp_path_factory):
+    """O cliente pagou duas notas de uma vez, mas a segunda chegou depois de o pagamento estar ligado à primeira."""
+    from test_transferencias import _pdf_texto
+
+    comprovante = tmp_path_factory.mktemp("transferencias") / "comprovante.pdf"
+    comprovante.write_bytes(_pdf_texto("Comprovante de transferência\nPix enviado\n24/11/2026 - 08:40:12\nValor\nR$ 2.000,00\n"
+                                       "ID da transação: E00000000202611240840s0000000001"))
+    enviar = """async ([origem, nota, valor, token]) => {
+      const dados = new FormData();
+      Object.entries({ origem_id: origem, nota, valor, empresa: "Construtora Exemplo Ltda", documento: "98765432000110",
+                       forma: "pix", emitida_em: "2026-11-24 09:00:00" }).forEach(([k, v]) => dados.append(k, v));
+      const resposta = await fetch("/api/integracao/operacoes/notas", { method: "POST", body: dados,
+                                                                       headers: { Authorization: `Bearer ${token}` } });
+      return resposta.status;
+    }"""
+    nota_aguardando = 'input[data-marcar]:not([data-marcar="todos"])'
+    assert pagina.evaluate(enviar, ["7001", "7400", "1200.00", TOKEN_OPERACOES]) == 201
+    _ir(pagina, "painel")  # sai e volta para a tela desenhar de novo
+    _ir(pagina, "transferencias")
+    pagina.check(nota_aguardando)
+    pagina.click("[data-acao=ligar]")
+    pagina.set_input_files(".modal [data-lp-arquivo]", str(comprovante))
+    pagina.wait_for_selector(".modal [data-lp-conta] .alerta", timeout=60_000)
+    assert "pagou a mais" in _texto(pagina, ".modal [data-lp-conta]")
+    pagina.click(".modal [data-lp-confirmar]")
+    pagina.wait_for_selector("text=Pagamento ligado", timeout=20_000)
+
+    # a segunda nota chega depois: entra no mesmo pagamento, sem ligar o comprovante de novo
+    assert pagina.evaluate(enviar, ["7002", "7401", "800.00", TOKEN_OPERACOES]) == 201
+    _ir(pagina, "painel")
+    _ir(pagina, "transferencias")
+    pagina.check(nota_aguardando)
+    pagina.click("[data-acao=juntar]")
+    pagina.wait_for_selector(".modal .jp-opcao", timeout=20_000)
+    assert "Sobra R$ 800,00 · bate" in _texto(pagina, ".modal .jp-opcao")
+    pagina.check(".modal .jp-opcao input")
+    assert "bate com o valor pago (R$ 2.000,00)" in _texto(pagina, ".modal [data-jp-conta]")
+    pagina.click(".modal [data-jp-confirmar]")
+    pagina.wait_for_selector("text=juntada ao pagamento", timeout=20_000)
+    pagina.wait_for_selector("text=Junto com a nota 7401", timeout=20_000)
+    tabela = _texto(pagina, "#t-tabela")
+    assert "Junto com a nota 7400" in tabela and "Aguardando pagamento" not in tabela
     assert not pagina.erros, pagina.erros

@@ -354,6 +354,52 @@ def test_desfazer_volta_as_notas_e_guarda_o_pagamento(tela):
     assert religado.status_code == 201 and religado.json()["pagamento"]["id"] == 2
 
 
+def test_junta_a_nota_que_chegou_depois_ao_pagamento_ja_ligado(tela):
+    """O cliente pagou as notas 100 e 200 de uma vez (R$ 3.811,20), mas o comprovante foi ligado quando só a 100 tinha
+    chegado: a 200 entra no mesmo pagamento, sem ligar o comprovante de novo."""
+    assert _ligar(tela, [1], _ler(tela)["arquivo"]).status_code == 201  # pagou a mais: sobra o valor da nota 200
+
+    [ligado] = tela.get("/api/transferencias/pagamentos").json()["pagamentos"]
+    assert (ligado["id"], ligado["notas"], ligado["valor"]) == (1, ["100"], 3811.2)
+    assert (ligado["soma_notas"], ligado["sobra"], ligado["empresas"]) == (1905.6, 1905.6, ["Imapal"])
+
+    # ligar o mesmo comprovante à nota nova é recusado, e a leitura já diz a que pagamento ele pertence
+    de_novo = _ler(tela)
+    assert (de_novo["ja_usado"], de_novo["ja_usado_notas"]) == (1, "100")
+    assert _ligar(tela, [2], de_novo["arquivo"]).json()["detail"]["codigo"] == "comprovante_repetido"
+
+    juntado = tela.post("/api/transferencias/pagamentos/1/juntar", json={"ids": [2, 2]})
+    assert juntado.status_code == 200, juntado.text
+    assert juntado.json()["pagamento"]["notas"] == ["100", "200"] and juntado.json()["pagamento"]["valor"] == 3811.2
+    assert [(t["nota"], t["status"], t["pagamento_id"]) for t in juntado.json()["transferencias"]] == [("200", "Pago", 1)]
+    linhas = _linhas(tela)
+    assert linhas["100"]["pagamento"] == linhas["200"]["pagamento"] and linhas["300"]["status"] == "Aguardando pagamento"
+    [guardado] = contexto.transferencias.listar("pagamentos")
+    assert guardado["notas"] == "100, 200" and guardado["comprovante"]  # a planilha mostra as duas notas no pagamento
+    assert tela.get("/api/transferencias/pagamentos").json()["pagamentos"][0]["sobra"] == 0
+    assert any(e["usuario"] == "Computador principal" for e in contexto.transferencias.historico_do_registro(2))
+
+    # desfazer volta as duas notas, e o pagamento sai da lista para juntar
+    assert tela.post("/api/transferencias/pagamentos/1/desfazer").status_code == 200
+    assert {t["status"] for t in _linhas(tela).values()} == {"Aguardando pagamento"}
+    assert tela.get("/api/transferencias/pagamentos").json()["pagamentos"] == []
+
+
+def test_juntar_recusa_pagamento_desfeito_nota_paga_ou_inexistente(tela):
+    assert _ligar(tela, [1], _ler(tela)["arquivo"]).status_code == 201
+    for pagamento, ids, status, codigo in ((1, [1], 409, "nota_ja_paga"), (1, [2, 99], 404, "nota_nao_encontrada"),
+                                           (9, [2], 404, "pagamento_nao_encontrado")):
+        resposta = tela.post(f"/api/transferencias/pagamentos/{pagamento}/juntar", json={"ids": ids})
+        assert resposta.status_code == status and resposta.json()["detail"]["codigo"] == codigo
+    assert tela.post("/api/transferencias/pagamentos/1/juntar", json={"ids": []}).status_code == 422
+    assert _linhas(tela)["200"]["status"] == "Aguardando pagamento"  # nada pela metade
+
+    assert tela.post("/api/transferencias/pagamentos/1/desfazer").status_code == 200
+    desfeito = tela.post("/api/transferencias/pagamentos/1/juntar", json={"ids": [2]})
+    assert desfeito.status_code == 409 and desfeito.json()["detail"]["codigo"] == "pagamento_desfeito"
+    assert {t["status"] for t in _linhas(tela).values()} == {"Aguardando pagamento"}
+
+
 def test_exclui_nota_aguardando_e_fica_no_historico(tela):
     excluida = tela.delete("/api/transferencias/2")
     assert excluida.status_code == 204, excluida.text
@@ -411,7 +457,9 @@ def test_ligar_so_com_login_e_permissao(sistema, tela):
         _entrar(celular, "almir", "almir-2026")
         for resposta in (celular.post("/api/transferencias/pagamentos/ler", files=pdf), _ligar(celular, [1], arquivo),
                          celular.post("/api/transferencias/pagamentos/1/desfazer"),
-                         celular.get("/api/transferencias/pagamentos/1/comprovante")):
+                         celular.get("/api/transferencias/pagamentos/1/comprovante"),
+                         celular.get("/api/transferencias/pagamentos"),
+                         celular.post("/api/transferencias/pagamentos/1/juntar", json={"ids": [2]})):
             assert resposta.status_code == 403 and resposta.json()["detail"]["permissao"] == "transferencias"
 
     with TestClient(main.app, client=CELULAR) as celular:

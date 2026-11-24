@@ -1,5 +1,6 @@
 """API das transferências de clientes: a entrada da integração com a Operações (só com o token), a tela, o ligar
-pagamento (comprovante Pix/TED ligado a uma ou mais notas) e a conciliação com os Pix recebidos no Bradesco."""
+pagamento (comprovante Pix/TED ligado a uma ou mais notas), o juntar nota que chegou depois a um pagamento já ligado e a
+conciliação com os Pix recebidos no Bradesco."""
 
 from __future__ import annotations
 
@@ -36,6 +37,11 @@ class LigarEntrada(BaseModel):
     documento_pagador: str | None = Field(None, max_length=30)
     id_transacao: str | None = Field(None, max_length=120)
     observacao: str | None = Field(None, max_length=500)
+
+
+class JuntarEntrada(BaseModel):
+    """Notas que chegaram depois e foram pagas pelo mesmo pagamento (o cliente pagou tudo de uma vez)."""
+    ids: list[int] = Field(..., min_length=1, max_length=500)
 
 
 class ConsultaEntrada(BaseModel):
@@ -152,7 +158,8 @@ def ler_comprovante(arquivo: Upload = File(...)):
     meta = ctx.arquivos.salvar(dados, arquivo.filename or "comprovante")
     lido = servico.ler_comprovante(dados)
     repetido = servico.pagamento_com_id(lido["id_transacao"] or "")
-    return {**lido, "arquivo": meta["id"], "arquivo_nome": meta["nome"], "ja_usado": repetido["id"] if repetido else None}
+    return {**lido, "arquivo": meta["id"], "arquivo_nome": meta["nome"], "ja_usado": repetido["id"] if repetido else None,
+            "ja_usado_notas": (repetido or {}).get("notas") or ""}
 
 
 def _pagamento(funcao, *args):
@@ -167,6 +174,21 @@ def _pagamento(funcao, *args):
 def ligar_pagamento(entrada: LigarEntrada, request: Request):
     resposta = _pagamento(servico.ligar, entrada.ids, entrada.arquivo, entrada.model_dump(), autor(request))
     log.info("Pagamento %s ligado às notas %s (%s)", resposta["pagamento"]["id"], resposta["pagamento"]["notas"], autor(request))
+    return resposta
+
+
+@router.get("/api/transferencias/pagamentos")
+def pagamentos_ativos():
+    """Pagamentos ligados (não desfeitos), com a soma das notas e o que sobra: para juntar uma nota que chegou depois."""
+    return {"pagamentos": servico.pagamentos_ativos()}
+
+
+@router.post("/api/transferencias/pagamentos/{id_}/juntar")
+def juntar_notas(id_: int, entrada: JuntarEntrada, request: Request):
+    """Junta ao pagamento já ligado as notas que chegaram depois. O comprovante ou o Pix não é ligado de novo."""
+    resposta = _pagamento(servico.juntar, id_, entrada.ids, autor(request))
+    log.info("Notas %s juntadas ao pagamento %s (%s)", [t["nota"] for t in resposta["transferencias"]], id_,
+             autor(request))
     return resposta
 
 

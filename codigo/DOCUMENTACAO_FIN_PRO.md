@@ -698,6 +698,13 @@ vezes: o Fin Pro avisa já na leitura. Nota que já está paga também não entr
 notas daquele pagamento para **Aguardando pagamento**; o pagamento e o comprovante continuam guardados como "desfeito",
 e o comprovante pode ser ligado de novo às notas certas.
 
+**Nota que chegou depois (o cliente pagou tudo junto):** se o pagamento já foi ligado a uma nota e outra nota do mesmo
+pagamento chegou depois, marque a nota nova e toque em **Juntar a pagamento já ligado**. A janela mostra os pagamentos
+ligados (primeiro o que tem a sobra exata do valor da nota e os do mesmo cliente) e, ao escolher um, a conta: se as notas
+do pagamento passam a bater com o valor pago ou a diferença. A nota vira **Pago** no mesmo pagamento, sem ligar o
+comprovante (ou o Pix) de novo. Se você tocar em **Ligar pagamento** e mandar o mesmo comprovante, o Fin Pro avisa a que
+pagamento ele já está ligado e oferece **Juntar a esse pagamento**. **Desfazer** volta todas as notas do pagamento.
+
 **Pix recebidos no Bradesco (API Pix):** com a API ligada, a tela ganha o cartão **Pix recebidos no Bradesco**. Ao abrir
 a tela (ou no botão **Buscar Pix**, com o período De/Até, até 31 dias), o Fin Pro consulta os Pix que entraram na conta e
 procura a nota **Aguardando pagamento** que bate pelo **CNPJ/CPF de quem pagou** e pelo **valor exato**:

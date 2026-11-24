@@ -11,6 +11,8 @@
 * Toda nota nova entra como **Aguardando pagamento**. Vira **Pago** quando alguém liga um comprovante (Pix/TED) a ela,
   ou confirma um Pix recebido no Bradesco (API Pix): um pagamento pode cobrir várias notas e juntar vários Pix.
   Desfazer o pagamento volta as notas; o pagamento fica guardado como desfeito.
+* O cliente pagou duas notas de uma vez, mas uma chegou depois de o pagamento já estar ligado: a nota é **juntada** ao
+  mesmo pagamento (o comprovante ou o Pix não é ligado de novo). Desfazer volta todas as notas do pagamento.
 * O mesmo Pix (endToEndId) ou o mesmo comprovante (ID da transação) nunca paga duas vezes.
 * Nota mandada por engano pode ser excluída enquanto aguarda pagamento (fica no Histórico). Se a Operações mandar a
   mesma ordem de novo, ela volta como nota nova.
@@ -339,6 +341,57 @@ def _gravar(ids: list[int], dados: dict, usuario: str) -> tuple[dict, list[dict]
             [{"tipo": "adicionar", "aba": "pagamentos", "usuario": usuario,
               "dados": {**dados, "notas": ", ".join(notas), "status": ATIVO}}]
             + [{"tipo": "atualizar", "id": i, "usuario": usuario, "dados": {"status": PAGO, "pagamento_id": proximo}}
+               for i in ids])
+    return _publico(resultados[0]["registro"], notas), [r["registro"] for r in resultados[1:]]
+
+
+def pagamentos_ativos() -> list[dict]:
+    """Os pagamentos ligados (não desfeitos), dos mais novos para os mais antigos, com quanto as notas somam e quanto
+    sobra do valor pago: é a lista para escolher a que pagamento juntar uma nota que chegou depois."""
+    notas_por_pagamento: dict[int, list[dict]] = {}
+    for r in ctx.transferencias.listar():
+        if r.get("pagamento_id"):
+            notas_por_pagamento.setdefault(r["pagamento_id"], []).append(r)
+    saida = []
+    for p in ctx.transferencias.listar("pagamentos"):
+        if p.get("status") != ATIVO:
+            continue
+        notas = notas_por_pagamento.get(p["id"], [])
+        soma = round(sum(a_receber(n) or 0 for n in notas), 2)
+        saida.append({**_publico(p, [n["nota"] for n in notas]), "soma_notas": soma,
+                      "sobra": round((p.get("valor") or 0) - soma, 2),
+                      "empresas": sorted({n["empresa"] for n in notas if n.get("empresa")}, key=_normalizar),
+                      "documentos": sorted({n["documento"] for n in notas if n.get("documento")})})
+    saida.sort(key=lambda p: (p["data"] or "", p["id"]), reverse=True)
+    return saida
+
+
+def juntar(pagamento_id: int, ids: list[int], usuario: str) -> tuple[dict, list[dict]]:
+    """Junta a um pagamento já ligado as notas que chegaram depois (o cliente pagou tudo de uma vez). As notas passam a
+    Pago no mesmo pagamento; o valor pago, o comprovante e o Pix não mudam. Devolve ``(pagamento, notas juntadas)``."""
+    ids = list(dict.fromkeys(ids))
+    if not ids:
+        raise ErroPagamento(422, "sem_notas", "Marque pelo menos uma nota.")
+    banco = ctx.transferencias
+    with _lock:
+        pagamento = next((p for p in banco.listar("pagamentos") if p["id"] == pagamento_id), None)
+        if pagamento is None:
+            raise ErroPagamento(404, "pagamento_nao_encontrado", "Pagamento não encontrado. Atualize a tela e tente de novo.")
+        if pagamento.get("status") != ATIVO:
+            raise ErroPagamento(409, "pagamento_desfeito",
+                                "Este pagamento foi desfeito. Ligue o comprovante de novo, marcando todas as notas.")
+        todas = banco.listar()
+        por_id = {r["id"]: r for r in todas}
+        if any(i not in por_id for i in ids):
+            raise ErroPagamento(404, "nota_nao_encontrada", "Nota não encontrada. Atualize a tela e tente de novo.")
+        pagas = [por_id[i]["nota"] for i in ids if por_id[i].get("status") != AGUARDANDO]
+        if pagas:
+            raise ErroPagamento(409, "nota_ja_paga", f"A nota {', '.join(pagas)} já está paga.")
+        notas = [r["nota"] for r in todas if r.get("pagamento_id") == pagamento_id] + [por_id[i]["nota"] for i in ids]
+        resultados = banco.aplicar_lote(
+            [{"tipo": "atualizar", "aba": "pagamentos", "id": pagamento_id, "usuario": usuario,
+              "dados": {"notas": ", ".join(notas)}}]
+            + [{"tipo": "atualizar", "id": i, "usuario": usuario, "dados": {"status": PAGO, "pagamento_id": pagamento_id}}
                for i in ids])
     return _publico(resultados[0]["registro"], notas), [r["registro"] for r in resultados[1:]]
 
