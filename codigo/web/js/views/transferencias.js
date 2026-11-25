@@ -122,6 +122,13 @@ async function aoClicar(e) {
     enviarCartao(botao);
   } else if (acao === "ligar") {
     abrirLigar([...selecionadas.values()]);
+  } else if (acao === "juntar") {
+    botao.disabled = true;
+    try {
+      await abrirJuntar([...selecionadas.values()]);
+    } finally {
+      botao.disabled = false;
+    }
   } else if (acao === "ligar-pix") {
     ligarPixMarcados(botao);
   } else if (acao === "bp-confirmar") {
@@ -195,6 +202,8 @@ function desenharLote() {
           title="${notas.length ? "Ligar os Pix marcados às notas marcadas" : "Marque também as notas que estes Pix pagam"}">${icone("banco", 14)} Ligar aos Pix marcados</button>`
       : ""}
     ${notas.length ? `<button class="btn btn-sm ${pix.length ? "" : "btn-primario"}" data-acao="ligar">${icone("clipe", 14)} Ligar pagamento</button>` : ""}
+    ${notas.length && !pix.length ? `<button class="btn btn-sm" data-acao="juntar"
+        title="O cliente pagou junto e a nota chegou depois de o pagamento já estar ligado">${icone("mais", 14)} Juntar a pagamento já ligado</button>` : ""}
     <button class="btn btn-sm btn-fantasma" data-acao="limpar">Limpar seleção</button>`;
 }
 
@@ -291,6 +300,11 @@ function desenharTabela(linhas) {
 
 // ------------------------------------------------------------------ ligar pagamento
 
+/** As notas marcadas, com o que cada uma espera receber e a soma (no topo das janelas de ligar e de juntar). */
+const listaNotas = (notas) => `<ul class="lp-notas">${notas.map((t) => `<li><strong>Nota ${esc(t.nota)}</strong>
+  <span class="sutil">${esc(t.empresa)}${t.documento ? ` · ${esc(documentoBR(t.documento))}` : ""}${t.valor_receber ? ` · ${esc(t.formas)}` : ""}</span><span class="num">${brl(aReceber(t))}</span></li>`).join("")}
+  <li class="lp-soma"><strong>Soma das notas</strong><span></span><span class="num">${brl(somaDe(notas))}</span></li></ul>`;
+
 function abrirLigar(notas) {
   if (!notas.length) return;
   const soma = somaDe(notas);
@@ -300,9 +314,7 @@ function abrirLigar(notas) {
     titulo: notas.length === 1 ? `Ligar pagamento à nota ${notas[0].nota}` : `Ligar pagamento a ${notas.length} notas`,
     tamanho: "lg",
     corpo: `
-      <ul class="lp-notas">${notas.map((t) => `<li><strong>Nota ${esc(t.nota)}</strong>
-        <span class="sutil">${esc(t.empresa)}${t.documento ? ` · ${esc(documentoBR(t.documento))}` : ""}${t.valor_receber ? ` · ${esc(t.formas)}` : ""}</span><span class="num">${brl(aReceber(t))}</span></li>`).join("")}
-        <li class="lp-soma"><strong>Soma das notas</strong><span></span><span class="num">${brl(soma)}</span></li></ul>
+      ${listaNotas(notas)}
       <div class="det-comprovante" data-lp-envio></div>
       <input type="file" accept="application/pdf,image/*,.heic,.heif" data-lp-arquivo hidden>
       <form class="grade-campos lp-campos" data-lp-form autocomplete="off" hidden>
@@ -394,9 +406,13 @@ function abrirLigar(notas) {
     formulario.hidden = false;
     desenharEnvio("lido", arquivo);
     desenharConta();
+    const usadoEm = lido.ja_usado_notas ? `, ${lido.ja_usado_notas.includes(",") ? "das notas" : "da nota"} ${esc(lido.ja_usado_notas)}` : "";
     el.querySelector("[data-lp-repetido]").innerHTML = lido.ja_usado
-      ? `<div class="alerta erro">${icone("alerta", 16)}<div>Este comprovante (mesmo ID da transação) já está ligado a outro pagamento.
-          Confira se não é repetido.</div></div>` : "";
+      ? `<div class="alerta erro">${icone("alerta", 16)}<div>Este comprovante (mesmo ID da transação) já está ligado ao pagamento nº ${lido.ja_usado}${usadoEm}.
+          Se o cliente pagou tudo junto e ${notas.length === 1 ? "esta nota chegou" : "estas notas chegaram"} depois, junte ao mesmo pagamento.
+          Se não, confira se o comprovante não é repetido.
+          <div class="lp-juntar"><button type="button" class="btn btn-sm btn-primario" data-lp-juntar>${icone("mais", 14)} Juntar a esse pagamento</button></div></div></div>`
+      : "";
     botaoConfirmar.disabled = false;
     (lido.valor ? botaoConfirmar : campo("valor")).focus();
   };
@@ -417,6 +433,14 @@ function abrirLigar(notas) {
   window.addEventListener("arquivos:soltos", aoSoltar);
 
   envio.addEventListener("click", (e) => { if (e.target.closest("[data-lp-escolher]")) entrada.click(); });
+  // comprovante já ligado a um pagamento: a nota que chegou depois entra nele, sem ligar o comprovante de novo
+  el.querySelector("[data-lp-repetido]").addEventListener("click", async (e) => {
+    const botao = e.target.closest("[data-lp-juntar]");
+    if (!botao || !lido?.ja_usado) return;
+    botao.disabled = true;
+    if (await juntarAoPagamento(lido.ja_usado, notas)) fechar(true);
+    else botao.disabled = false;
+  });
   entrada.addEventListener("change", () => { ler(entrada.files?.[0]); entrada.value = ""; });
   formulario.addEventListener("input", (e) => {
     e.target.classList.remove("baixa-confianca");
@@ -449,6 +473,102 @@ function abrirLigar(notas) {
   botaoConfirmar.addEventListener("click", confirmarLigacao);
   formulario.addEventListener("submit", confirmarLigacao);
   desenharEnvio("vazio");
+}
+
+// ------------------------------------------------------------------ juntar a um pagamento já ligado
+// O cliente pagou duas notas de uma vez, mas uma chegou depois de o pagamento já estar ligado: a nota entra no mesmo
+// pagamento (o comprovante ou o Pix não é ligado de novo).
+
+const centavos = (v) => Math.round(Number(v || 0) * 100);
+const nomeNormal = (t) => String(t || "").normalize("NFD").replace(/\p{M}/gu, "").trim().toLowerCase(); // sem acento
+
+/** O pagamento é do mesmo cliente das notas marcadas: mesmo CNPJ/CPF (da nota ou de quem pagou) ou mesmo nome. */
+function doMesmoCliente(p, notas) {
+  return notas.some((t) => (t.documento && (p.documentos.includes(t.documento) || p.documento_pagador === t.documento))
+    || p.empresas.some((e) => nomeNormal(e) === nomeNormal(t.empresa)));
+}
+
+async function juntarAoPagamento(pagamentoId, notas) {
+  try {
+    await api.post(`${ROTA_PAGAMENTOS}/${pagamentoId}/juntar`, { ids: notas.map((t) => t.id) });
+  } catch (erro) {
+    toast(mensagemErro(erro), "erro", { duracao: 7000 });
+    return false;
+  }
+  notas.forEach((t) => selecionadas.delete(t.id));
+  toast(notas.length === 1 ? `Nota ${notas[0].nota} juntada ao pagamento nº ${pagamentoId}: está como Pago.`
+    : `As ${notas.length} notas foram juntadas ao pagamento nº ${pagamentoId}: estão como Pago.`, "ok", { duracao: 5000 });
+  carregar();
+  return true;
+}
+
+function opcaoPagamento(p, soma) {
+  const bate = soma > 0 && centavos(p.sobra) === centavos(soma);
+  return `<label class="opcao-permissao jp-opcao"><input type="radio" name="jp-pagamento" value="${p.id}">
+    <span class="jp-texto"><strong>Pagamento nº ${p.id} · ${brl(p.valor)} em ${dataBR(p.data)}</strong>
+      <small class="sutil">${p.notas.length === 1 ? "Nota" : "Notas"} ${esc(p.notas.join(", "))}${p.empresas.length ? ` · ${esc(p.empresas.join(", "))}` : ""}</small>
+      <small class="sutil">${p.origem === ORIGEM_PIX ? "Pix confirmado pelo Bradesco" : "Comprovante"}${p.pagador ? ` · ${esc(p.pagador)}` : ""}</small></span>
+    ${p.sobra > 0 ? `<span class="chip ${bate ? "ok" : "info"}">Sobra ${brl(p.sobra)}${bate ? " · bate" : ""}</span>` : ""}
+    ${p.comprovante ? `<a class="btn-icone" href="${ROTA_PAGAMENTOS}/${p.id}/comprovante" target="_blank" rel="noopener"
+        title="Abrir o comprovante do pagamento nº ${p.id}" aria-label="Abrir o comprovante do pagamento nº ${p.id}">${icone("olho", 15)}</a>` : ""}
+  </label>`;
+}
+
+function contaJuntar(p, notas, soma) {
+  const total = Math.round((p.soma_notas + soma) * 100) / 100;
+  const diferenca = Math.round((p.valor - total) * 100) / 100;
+  const quais = notas.length === 1 ? `a nota ${esc(notas[0].nota)}` : `as notas ${esc(notas.map((t) => t.nota).join(", "))}`;
+  return diferenca === 0
+    ? `<div class="alerta ok">${icone("ok", 16)}<div>Com ${quais}, as notas do pagamento somam ${brl(total)}: bate com o valor pago (${brl(p.valor)}).</div></div>`
+    : `<div class="alerta erro">${icone("alerta", 16)}<div><strong>Não bate: diferença de ${brl(Math.abs(diferenca))}.</strong>
+        O pagamento tem ${brl(p.valor)} e, com ${quais}, as notas somam ${brl(total)} (${diferenca > 0 ? "pagou a mais" : "pagou a menos"}).
+        Confira antes de juntar.</div></div>`;
+}
+
+async function abrirJuntar(notas) {
+  if (!notas.length) return;
+  let pagamentos;
+  try {
+    pagamentos = (await api.get(ROTA_PAGAMENTOS)).pagamentos;
+  } catch (erro) {
+    toast(mensagemErro(erro), "erro", { duracao: 6000 });
+    return;
+  }
+  const soma = somaDe(notas);
+  const uma = notas.length === 1;
+  // primeiro o pagamento em que sobra exatamente o valor das notas marcadas; depois os do mesmo cliente e os com sobra
+  const ordem = (p) => (soma > 0 && centavos(p.sobra) === centavos(soma) ? 0 : doMesmoCliente(p, notas) ? 1 : p.sobra > 0 ? 2 : 3);
+  const opcoes = pagamentos.map((p) => [ordem(p), p]).filter(([o]) => o < 3).sort((a, b) => a[0] - b[0]).slice(0, 30).map(([, p]) => p);
+  const { el, fechar } = abrirModal({
+    titulo: uma ? `Juntar a nota ${notas[0].nota} a um pagamento já ligado` : `Juntar ${notas.length} notas a um pagamento já ligado`,
+    tamanho: "lg",
+    corpo: `
+      ${listaNotas(notas)}
+      ${opcoes.length
+        ? `<p class="sutil">Use quando o cliente pagou tudo junto e ${uma ? "esta nota chegou" : "estas notas chegaram"} depois de o pagamento
+            já estar ligado. O comprovante (ou o Pix) não é ligado de novo. Escolha o pagamento:</p>
+          <div class="lista-permissoes jp-lista" role="radiogroup" aria-label="Pagamentos já ligados">${opcoes.map((p) => opcaoPagamento(p, soma)).join("")}</div>
+          <div data-jp-conta aria-live="polite"></div>`
+        : `<div class="alerta aviso">${icone("alerta", 16)}<div>Nenhum pagamento ligado tem sobra ou é do mesmo cliente. Se o pagamento
+            ainda não foi ligado, use <strong>Ligar pagamento</strong> com o comprovante, marcando todas as notas.</div></div>`}`,
+    rodape: `<button class="btn btn-fantasma" data-fechar>Cancelar</button>
+             ${opcoes.length ? `<button class="btn btn-primario" data-jp-confirmar disabled>${icone("check", 16)} Juntar ao pagamento</button>` : ""}`,
+  });
+  if (!opcoes.length) return;
+  const botao = el.querySelector("[data-jp-confirmar]");
+  const escolhido = () => opcoes.find((p) => String(p.id) === el.querySelector('input[name="jp-pagamento"]:checked')?.value);
+  el.querySelector(".jp-lista").addEventListener("change", () => {
+    const p = escolhido();
+    botao.disabled = !p;
+    el.querySelector("[data-jp-conta]").innerHTML = p ? contaJuntar(p, notas, soma) : "";
+  });
+  botao.addEventListener("click", async () => {
+    const p = escolhido();
+    if (!p) return;
+    botao.disabled = true;
+    if (await juntarAoPagamento(p.id, notas)) fechar(true);
+    else botao.disabled = false;
+  });
 }
 
 async function excluir(t) {
